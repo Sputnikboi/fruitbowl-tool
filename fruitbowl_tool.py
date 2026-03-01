@@ -722,8 +722,7 @@ class FruitbowlApp:
             filetypes=[("Blockbench Models", "*.bbmodel"), ("All Files", "*.*")])
         if path:
             self.bbmodel_path.set(path)
-            if not self.model_name.get():
-                self.model_name.set(sanitize_name(os.path.basename(path)))
+            self.model_name.set(sanitize_name(os.path.basename(path)))
 
     def _refresh_items(self):
         pack = self.pack_path.get()
