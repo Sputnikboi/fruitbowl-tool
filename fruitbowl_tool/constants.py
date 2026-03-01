@@ -74,3 +74,13 @@ ITEM_TO_HEADING = {
     "snowball":         "Snowball",
     "salmon":           "Salmon",
 }
+
+# ── Block-type items: fallback model is a block model, not item model ────────
+# When creating a new dispatch file for these items, the fallback must reference
+# the block model (e.g. minecraft:block/stone_button_inventory) instead of
+# the default minecraft:item/<id> which doesn't exist for block items.
+BLOCK_ITEM_FALLBACKS = {
+    "stone_button":     "minecraft:block/stone_button_inventory",
+    "white_wool":       "minecraft:block/white_wool",
+    "carved_pumpkin":   "minecraft:block/carved_pumpkin",
+}

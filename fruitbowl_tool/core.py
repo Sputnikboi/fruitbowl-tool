@@ -10,7 +10,7 @@ import re
 
 from .constants import (
     TEXTURE_DIR, MODEL_DIR, FB_ITEMS_DIR, MC_ITEMS_DIR, ATLAS_DIR,
-    MODEL_LIST, KNOWN_ITEMS, ITEM_TO_HEADING,
+    MODEL_LIST, KNOWN_ITEMS, ITEM_TO_HEADING, BLOCK_ITEM_FALLBACKS,
 )
 
 
@@ -144,6 +144,9 @@ def update_minecraft_item(mc_item_path: str, model_name: str, mc_item_id: str) -
         entries = data["model"]["entries"]
         next_threshold = max(e["threshold"] for e in entries) + 1
     else:
+        # Block-type items need a block model fallback, not item model
+        fallback_model = BLOCK_ITEM_FALLBACKS.get(
+            mc_item_id, f"minecraft:item/{mc_item_id}")
         data = {
             "model": {
                 "type": "minecraft:range_dispatch",
@@ -151,7 +154,7 @@ def update_minecraft_item(mc_item_path: str, model_name: str, mc_item_id: str) -
                 "index": 0,
                 "fallback": {
                     "type": "minecraft:model",
-                    "model": f"minecraft:item/{mc_item_id}",
+                    "model": fallback_model,
                 },
                 "entries": [],
             }
