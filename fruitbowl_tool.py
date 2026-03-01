@@ -87,6 +87,12 @@ def build_model_json(bbmodel: dict, model_name: str) -> dict:
     res = bbmodel.get("resolution", {"width": 16, "height": 16})
     texture_size = [res["width"], res["height"]]
 
+    # UV scaling: bbmodel stores pixel coordinates, MC expects 0-16 based coords
+    # MC formula: pixel = uv * (texture_size / 16)
+    # So: mc_uv = pixel_uv * 16 / texture_size
+    uv_scale_x = 16.0 / res["width"]
+    uv_scale_y = 16.0 / res["height"]
+
     # Build texture references — faces use the array index, not the id field
     textures = {}
     for idx, tex in enumerate(bbmodel.get("textures", [])):
@@ -119,7 +125,15 @@ def build_model_json(bbmodel: dict, model_name: str) -> dict:
 
         # Faces
         for face_name, face_data in el.get("faces", {}).items():
-            face = {"uv": face_data["uv"]}
+            raw_uv = face_data["uv"]
+            face = {
+                "uv": [
+                    raw_uv[0] * uv_scale_x,
+                    raw_uv[1] * uv_scale_y,
+                    raw_uv[2] * uv_scale_x,
+                    raw_uv[3] * uv_scale_y,
+                ],
+            }
             if "texture" in face_data and face_data["texture"] is not None:
                 face["texture"] = f"#{face_data['texture']}"
             if face_data.get("rotation"):
