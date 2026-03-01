@@ -294,16 +294,17 @@ def check_existing(pack_root: str, model_name: str) -> list[str]:
 
 
 def update_model_list(pack_root: str, mc_item_id: str, model_name: str,
-                      threshold: int, author: str = "") -> tuple[str, str]:
+                      threshold: int, author: str = "",
+                      heading_override: str = "") -> tuple[str, str]:
     """
     Add or update an entry in model list.txt under the right heading.
+    heading_override lets the caller specify a custom heading name.
     Returns a (tag, message) log tuple.
     """
     list_path = os.path.join(pack_root, MODEL_LIST)
 
-    heading = ITEM_TO_HEADING.get(mc_item_id)
+    heading = heading_override or ITEM_TO_HEADING.get(mc_item_id)
     if not heading:
-        # Use a title-cased version of the item id as fallback
         heading = mc_item_id.replace("_", " ").title()
 
     display = display_name_from_model(model_name)
@@ -370,7 +371,8 @@ def update_model_list(pack_root: str, mc_item_id: str, model_name: str,
 
 def add_to_pack(bbmodel_path: str, pack_root: str, mc_item_id: str,
                 model_name: str | None = None,
-                author: str = "") -> list[tuple[str, str]]:
+                author: str = "",
+                heading_override: str = "") -> list[tuple[str, str]]:
     """
     Full pipeline: extract from bbmodel and add to pack.
     Returns a list of (tag, message) tuples.
@@ -436,11 +438,32 @@ def add_to_pack(bbmodel_path: str, pack_root: str, mc_item_id: str,
         log.append(("success", f"✓ Registered in {mc_item_id}.json → threshold {threshold}"))
 
     # 5 — Model list
-    log.append(update_model_list(pack_root, mc_item_id, model_name, threshold, author))
+    log.append(update_model_list(pack_root, mc_item_id, model_name, threshold, author, heading_override))
 
     log.append(("info", f"  → /trigger CustomModelData set {threshold}"))
 
     return log
+
+
+def heading_exists_in_list(pack_root: str, heading: str) -> bool:
+    """Check if a heading already exists in model list.txt."""
+    list_path = os.path.join(pack_root, MODEL_LIST)
+    if not os.path.exists(list_path):
+        return False
+    with open(list_path, "r", encoding="utf-8") as f:
+        for line in f:
+            if line.strip() == f"{heading}:":
+                return True
+    return False
+
+
+def needs_heading_name(pack_root: str, mc_item_id: str) -> bool:
+    """Check if this item type needs a custom heading name for model list.txt."""
+    if mc_item_id in ITEM_TO_HEADING:
+        return False
+    # Also check if a fallback heading already exists in the file
+    fallback = mc_item_id.replace("_", " ").title()
+    return not heading_exists_in_list(pack_root, fallback)
 
 
 def scan_pack_items(pack_root: str) -> list[str]:
@@ -878,12 +901,74 @@ class FruitbowlApp:
                 self._log_to(self.log_text, "Cancelled by user.", "warn")
                 return
 
+        # Check if we need a custom heading name for model list.txt
+        heading = ""
+        if needs_heading_name(pack, item):
+            heading = self._ask_heading_name(item)
+            if heading is None:  # User cancelled
+                self._log_to(self.log_text, "Cancelled by user.", "warn")
+                return
+            if heading:
+                # Save for future use
+                self.settings.setdefault("custom_headings", {})[item] = heading
+                save_settings(self.settings)
+
         try:
-            messages = add_to_pack(bbmodel, pack, item, name, author)
+            messages = add_to_pack(bbmodel, pack, item, name, author, heading)
             for tag, msg in messages:
                 self._log_to(self.log_text, msg, tag)
         except Exception as e:
             self._log_to(self.log_text, f"ERROR: {e}", "error")
+
+    def _ask_heading_name(self, item_id: str) -> str | None:
+        """
+        Prompt for a plain-text heading name for the model list.
+        Returns the name, empty string to use default, or None if cancelled.
+        """
+        # Check if we already have a saved custom heading
+        saved = self.settings.get("custom_headings", {}).get(item_id)
+        if saved:
+            return saved
+
+        fallback = item_id.replace("_", " ").title()
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("New Item Type")
+        dialog.resizable(False, False)
+        dialog.grab_set()
+
+        result = {"value": None}
+
+        ttk.Label(dialog, text=f"'{item_id}' is new to the model list.",
+                  padding=(12, 12, 12, 0)).pack()
+        ttk.Label(dialog, text="Enter the heading name for model list.txt:",
+                  padding=(12, 4, 12, 4)).pack()
+        ttk.Label(dialog, text=f"(leave blank to use '{fallback}')",
+                  font=("", 8), padding=(12, 0, 12, 4)).pack()
+
+        name_var = tk.StringVar()
+        entry = ttk.Entry(dialog, textvariable=name_var, width=35)
+        entry.pack(padx=12, pady=4)
+        entry.focus_set()
+
+        def apply():
+            result["value"] = name_var.get().strip()
+            dialog.destroy()
+
+        def cancel():
+            result["value"] = None
+            dialog.destroy()
+
+        entry.bind("<Return>", lambda e: apply())
+        entry.bind("<Escape>", lambda e: cancel())
+
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(pady=(8, 12))
+        ttk.Button(btn_frame, text="OK", command=apply, width=8).pack(side="left", padx=4)
+        ttk.Button(btn_frame, text="Cancel", command=cancel, width=8).pack(side="left", padx=4)
+
+        dialog.wait_window()
+        return result["value"]
 
     # ── Batch mode ───────────────────────────────────────────────────────
 
@@ -923,6 +1008,17 @@ class FruitbowlApp:
                 self._log_to(self.batch_log, "Cancelled by user.", "warn")
                 return
 
+        # Check if we need a custom heading name
+        heading = ""
+        if needs_heading_name(pack, item):
+            heading = self._ask_heading_name(item)
+            if heading is None:
+                self._log_to(self.batch_log, "Cancelled by user.", "warn")
+                return
+            if heading:
+                self.settings.setdefault("custom_headings", {})[item] = heading
+                save_settings(self.settings)
+
         total = len(self.batch_entries)
         success_count = 0
         update_count = 0
@@ -942,7 +1038,7 @@ class FruitbowlApp:
             try:
                 existing = check_existing(pack, name)
                 is_update = bool(existing)
-                messages = add_to_pack(filepath, pack, item, name, author)
+                messages = add_to_pack(filepath, pack, item, name, author, heading)
                 for tag, msg in messages:
                     self._log_to(self.batch_log, f"  {msg}", tag)
                 if is_update:
