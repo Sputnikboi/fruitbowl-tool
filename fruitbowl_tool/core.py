@@ -182,32 +182,56 @@ def update_minecraft_item(mc_item_path: str, model_name: str, mc_item_id: str) -
 
 
 def ensure_atlas(pack_root: str) -> list[tuple[str, str]]:
-    """Ensure the blocks.json atlas includes an item/ directory source."""
+    """
+    Ensure the items atlas includes an item/ directory source for custom textures.
+    Also removes stale item/ entries from the blocks atlas to prevent the
+    'Multiple atlases used in model' error with block items like stone_button.
+    """
     log = []
-    atlas_path = os.path.join(pack_root, ATLAS_DIR, "blocks.json")
-    os.makedirs(os.path.dirname(atlas_path), exist_ok=True)
+    atlas_dir = os.path.join(pack_root, ATLAS_DIR)
+    os.makedirs(atlas_dir, exist_ok=True)
 
-    if os.path.exists(atlas_path):
-        with open(atlas_path, "r", encoding="utf-8") as f:
-            atlas = json.load(f)
+    # ── Ensure items.json atlas has the item/ directory source ────────
+    items_atlas_path = os.path.join(atlas_dir, "items.json")
+    if os.path.exists(items_atlas_path):
+        with open(items_atlas_path, "r", encoding="utf-8") as f:
+            items_atlas = json.load(f)
     else:
-        atlas = {"sources": []}
+        items_atlas = {"sources": []}
 
-    has_item_dir = any(
+    has_item_in_items = any(
         s.get("source") == "item" and s.get("prefix") == "item/"
-        for s in atlas.get("sources", [])
+        for s in items_atlas.get("sources", [])
     )
 
-    if not has_item_dir:
-        atlas["sources"].append({
+    if not has_item_in_items:
+        items_atlas["sources"].insert(0, {
             "type": "minecraft:directory",
             "source": "item",
             "prefix": "item/"
         })
-        with open(atlas_path, "w", encoding="utf-8") as f:
-            json.dump(atlas, f, indent=2)
+        with open(items_atlas_path, "w", encoding="utf-8") as f:
+            json.dump(items_atlas, f, indent=2)
             f.write("\n")
-        log.append(("success", "✓ Fixed atlas — added item/ directory source to blocks.json"))
+        log.append(("success", "✓ Fixed items atlas — added item/ directory source"))
+
+    # ── Remove item/ from blocks.json if present (causes conflicts) ──
+    blocks_atlas_path = os.path.join(atlas_dir, "blocks.json")
+    if os.path.exists(blocks_atlas_path):
+        with open(blocks_atlas_path, "r", encoding="utf-8") as f:
+            blocks_atlas = json.load(f)
+
+        original_count = len(blocks_atlas.get("sources", []))
+        blocks_atlas["sources"] = [
+            s for s in blocks_atlas.get("sources", [])
+            if not (s.get("source") == "item" and s.get("prefix") == "item/")
+        ]
+
+        if len(blocks_atlas["sources"]) < original_count:
+            with open(blocks_atlas_path, "w", encoding="utf-8") as f:
+                json.dump(blocks_atlas, f, indent=2)
+                f.write("\n")
+            log.append(("success", "✓ Fixed blocks atlas — removed conflicting item/ source"))
 
     return log
 
