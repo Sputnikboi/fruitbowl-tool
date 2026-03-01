@@ -87,11 +87,10 @@ def build_model_json(bbmodel: dict, model_name: str) -> dict:
     res = bbmodel.get("resolution", {"width": 16, "height": 16})
     texture_size = [res["width"], res["height"]]
 
-    # Build texture references
+    # Build texture references — faces use the array index, not the id field
     textures = {}
-    for tex in bbmodel.get("textures", []):
-        tex_id = str(tex.get("id", "0"))
-        textures[tex_id] = f"fruitbowl:item/{model_name}"
+    for idx, tex in enumerate(bbmodel.get("textures", [])):
+        textures[str(idx)] = f"fruitbowl:item/{model_name}"
         if tex.get("particle", False):
             textures["particle"] = f"fruitbowl:item/{model_name}"
 
