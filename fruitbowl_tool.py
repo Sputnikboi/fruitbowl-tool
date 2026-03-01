@@ -18,6 +18,7 @@ TEXTURE_DIR  = os.path.join("assets", "fruitbowl", "textures", "item")
 MODEL_DIR    = os.path.join("assets", "fruitbowl", "models", "item")
 FB_ITEMS_DIR = os.path.join("assets", "fruitbowl", "items")
 MC_ITEMS_DIR = os.path.join("assets", "minecraft", "items")
+ATLAS_DIR    = os.path.join("assets", "minecraft", "atlases")
 
 # ── Known item types for the dropdown ────────────────────────────────────────
 KNOWN_ITEMS = [
@@ -205,6 +206,43 @@ def update_minecraft_item(mc_item_path: str, model_name: str, mc_item_id: str) -
     return next_threshold, False
 
 
+def ensure_atlas(pack_root: str) -> list[tuple[str, str]]:
+    """
+    Ensure the blocks.json atlas includes an item/ directory source so that
+    textures under assets/fruitbowl/textures/item/ are stitched into the atlas.
+    The 'directory' source type scans across ALL namespaces automatically.
+    Returns log messages.
+    """
+    log = []
+    atlas_path = os.path.join(pack_root, ATLAS_DIR, "blocks.json")
+    os.makedirs(os.path.dirname(atlas_path), exist_ok=True)
+
+    if os.path.exists(atlas_path):
+        with open(atlas_path, "r", encoding="utf-8") as f:
+            atlas = json.load(f)
+    else:
+        atlas = {"sources": []}
+
+    # Check if an item/ directory source already exists
+    has_item_dir = any(
+        s.get("source") == "item" and s.get("prefix") == "item/"
+        for s in atlas.get("sources", [])
+    )
+
+    if not has_item_dir:
+        atlas["sources"].append({
+            "type": "minecraft:directory",
+            "source": "item",
+            "prefix": "item/"
+        })
+        with open(atlas_path, "w", encoding="utf-8") as f:
+            json.dump(atlas, f, indent=2)
+            f.write("\n")
+        log.append(("success", "✓ Fixed atlas — added item/ directory source to blocks.json"))
+
+    return log
+
+
 def check_existing(pack_root: str, model_name: str) -> list[str]:
     """Check which files already exist for this model name. Returns list of existing paths."""
     existing = []
@@ -238,6 +276,9 @@ def add_to_pack(bbmodel_path: str, pack_root: str, mc_item_id: str,
     model_path   = os.path.join(pack_root, MODEL_DIR, f"{model_name}.json")
     fb_item_path = os.path.join(pack_root, FB_ITEMS_DIR, f"{model_name}.json")
     mc_item_path = os.path.join(pack_root, MC_ITEMS_DIR, f"{mc_item_id}.json")
+
+    # Ensure the texture atlas is configured
+    log.extend(ensure_atlas(pack_root))
 
     # Check what already exists
     existing = check_existing(pack_root, model_name)
