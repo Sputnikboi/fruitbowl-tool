@@ -601,6 +601,7 @@ class FruitbowlApp:
             main, textvariable=self.item_type,
             values=self.available_items, width=52, state="normal")
         self.item_combo.grid(row=row, column=0, columnspan=2, sticky="ew", **pad)
+        self.item_combo.bind("<KeyRelease>", lambda e: self._filter_combo(self.item_combo))
 
         row += 1
         btn_frame = ttk.Frame(main)
@@ -639,6 +640,7 @@ class FruitbowlApp:
             batch, textvariable=self.item_type,
             values=self.available_items, width=52, state="normal")
         self.batch_item_combo.grid(row=row, column=0, columnspan=2, sticky="ew", **pad)
+        self.batch_item_combo.bind("<KeyRelease>", lambda e: self._filter_combo(self.batch_item_combo))
 
         row += 1
         ttk.Label(batch, text="BBModel Files  (double-click Author column to edit)",
@@ -730,6 +732,19 @@ class FruitbowlApp:
             self.available_items = scan_pack_items(pack)
             self.item_combo["values"] = self.available_items
             self.batch_item_combo["values"] = self.available_items
+
+    # ── Combobox autocomplete ────────────────────────────────────────────
+
+    def _filter_combo(self, combo: ttk.Combobox):
+        """Filter combobox dropdown to items matching what's been typed."""
+        typed = combo.get().lower()
+        if not typed:
+            combo["values"] = self.available_items
+            return
+        filtered = [item for item in self.available_items if typed in item]
+        combo["values"] = filtered
+        if filtered:
+            combo.event_generate("<Down>")
 
     # ── Batch list management ────────────────────────────────────────────
 
