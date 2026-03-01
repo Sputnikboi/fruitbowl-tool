@@ -33,14 +33,32 @@ def load_bbmodel(path: str) -> dict:
         return json.load(f)
 
 
+def _find_primary_texture_index(bbmodel: dict) -> int:
+    """Find which texture index is most used by element faces."""
+    usage: dict[int, int] = {}
+    for el in bbmodel.get("elements", []):
+        for face_data in el.get("faces", {}).values():
+            tex = face_data.get("texture")
+            if tex is not None:
+                usage[tex] = usage.get(tex, 0) + 1
+    if not usage:
+        return 0
+    return max(usage, key=usage.get)
+
+
 def extract_texture_png(bbmodel: dict) -> bytes:
-    """Pull the first embedded texture's base64 PNG data."""
+    """Pull the most-used embedded texture's base64 PNG data."""
     textures = bbmodel.get("textures", [])
     if not textures:
         raise ValueError("No textures found in .bbmodel file.")
-    source = textures[0].get("source", "")
+
+    idx = _find_primary_texture_index(bbmodel)
+    if idx >= len(textures):
+        idx = 0  # fallback to first if index is out of range
+
+    source = textures[idx].get("source", "")
     if not source.startswith("data:image/png;base64,"):
-        raise ValueError("First texture is not an embedded base64 PNG.")
+        raise ValueError(f"Texture [{idx}] is not an embedded base64 PNG.")
     b64 = source.split(",", 1)[1]
     return base64.b64decode(b64)
 
@@ -54,12 +72,18 @@ def build_model_json(bbmodel: dict, model_name: str) -> dict:
     uv_scale_x = 16.0 / res["width"]
     uv_scale_y = 16.0 / res["height"]
 
-    # Build texture references — faces use the array index, not the id field
-    textures = {}
-    for idx, tex in enumerate(bbmodel.get("textures", [])):
-        textures[str(idx)] = f"fruitbowl:item/{model_name}"
-        if tex.get("particle", False):
-            textures["particle"] = f"fruitbowl:item/{model_name}"
+    # Find the primary texture and map all references to it
+    primary_idx = _find_primary_texture_index(bbmodel)
+    textures = {
+        str(primary_idx): f"fruitbowl:item/{model_name}",
+        "particle": f"fruitbowl:item/{model_name}",
+    }
+    # Also map any other texture indices used by faces to the same texture
+    for el in bbmodel.get("elements", []):
+        for face_data in el.get("faces", {}).values():
+            tex = face_data.get("texture")
+            if tex is not None and str(tex) not in textures:
+                textures[str(tex)] = f"fruitbowl:item/{model_name}"
 
     # Convert elements
     elements = []
