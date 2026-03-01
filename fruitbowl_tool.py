@@ -2,6 +2,7 @@
 """
 Fruitbowl Resource Pack Tool
 GUI tool for adding .bbmodel exports to the Fruitbowl Minecraft resource pack.
+Supports single-file and batch mode.
 """
 
 import base64
@@ -204,11 +205,22 @@ def update_minecraft_item(mc_item_path: str, model_name: str, mc_item_id: str) -
     return next_threshold, False
 
 
+def check_existing(pack_root: str, model_name: str) -> list[str]:
+    """Check which files already exist for this model name. Returns list of existing paths."""
+    existing = []
+    for subdir, ext in [(TEXTURE_DIR, ".png"), (MODEL_DIR, ".json"), (FB_ITEMS_DIR, ".json")]:
+        path = os.path.join(pack_root, subdir, f"{model_name}{ext}")
+        if os.path.exists(path):
+            existing.append(os.path.relpath(path, pack_root))
+    return existing
+
+
 def add_to_pack(bbmodel_path: str, pack_root: str, mc_item_id: str,
                 model_name: str | None = None) -> list[str]:
     """
     Full pipeline: extract from bbmodel and add to pack.
-    Returns a list of log messages.
+    Returns a list of (message, tag) tuples.
+    Each entry is "tag:message" where tag is success/warn/error/info.
     """
     log = []
 
@@ -227,12 +239,21 @@ def add_to_pack(bbmodel_path: str, pack_root: str, mc_item_id: str,
     fb_item_path = os.path.join(pack_root, FB_ITEMS_DIR, f"{model_name}.json")
     mc_item_path = os.path.join(pack_root, MC_ITEMS_DIR, f"{mc_item_id}.json")
 
+    # Check what already exists
+    existing = check_existing(pack_root, model_name)
+    if existing:
+        log.append(("warn", f"⚠ Updating existing model '{model_name}' — overwriting:"))
+        for ex in existing:
+            log.append(("warn", f"    {ex}"))
+    else:
+        log.append(("info", f"Adding new model '{model_name}'"))
+
     # 1 — Texture
     png_data = extract_texture_png(bbmodel)
     os.makedirs(os.path.dirname(texture_path), exist_ok=True)
     with open(texture_path, "wb") as f:
         f.write(png_data)
-    log.append(f"✓ Texture saved → textures/item/{model_name}.png")
+    log.append(("success", f"✓ Texture → textures/item/{model_name}.png"))
 
     # 2 — Model JSON
     model_json = build_model_json(bbmodel, model_name)
@@ -240,7 +261,7 @@ def add_to_pack(bbmodel_path: str, pack_root: str, mc_item_id: str,
     with open(model_path, "w", encoding="utf-8") as f:
         json.dump(model_json, f, indent=2)
         f.write("\n")
-    log.append(f"✓ Model saved → models/item/{model_name}.json")
+    log.append(("success", f"✓ Model  → models/item/{model_name}.json"))
 
     # 3 — Fruitbowl item JSON
     fb_item = build_fruitbowl_item_json(model_name)
@@ -248,20 +269,17 @@ def add_to_pack(bbmodel_path: str, pack_root: str, mc_item_id: str,
     with open(fb_item_path, "w", encoding="utf-8") as f:
         json.dump(fb_item, f, indent=2)
         f.write("\n")
-    log.append(f"✓ Item def saved → items/{model_name}.json")
+    log.append(("success", f"✓ Item   → items/{model_name}.json"))
 
     # 4 — Minecraft item dispatch
     os.makedirs(os.path.dirname(mc_item_path), exist_ok=True)
     threshold, was_duplicate = update_minecraft_item(mc_item_path, model_name, mc_item_id)
     if was_duplicate:
-        log.append(f"⚠ Already in {mc_item_id}.json at threshold {threshold}")
+        log.append(("warn", f"⚠ Already in {mc_item_id}.json — keeping threshold {threshold}"))
     else:
-        log.append(f"✓ Added to {mc_item_id}.json → threshold {threshold}")
+        log.append(("success", f"✓ Registered in {mc_item_id}.json → threshold {threshold}"))
 
-    log.append("")
-    log.append(f"In-game: hold {mc_item_id}, then run:")
-    log.append(f"  /trigger CustomModelData set {threshold}")
-    log.append(f"  (F3+T to reload pack)")
+    log.append(("info", f"  → /trigger CustomModelData set {threshold}"))
 
     return log
 
@@ -334,6 +352,9 @@ class FruitbowlApp:
         self.item_type = tk.StringVar()
         self.available_items: list[str] = list(KNOWN_ITEMS)
 
+        # Batch state
+        self.batch_files: list[str] = []
+
         # ── Build UI ─────────────────────────────────────────────────────
         self._build_ui()
 
@@ -345,23 +366,33 @@ class FruitbowlApp:
         pad = {"padx": 8, "pady": 4}
         wide_pad = {"padx": 8, "pady": (12, 4)}
 
-        main = ttk.Frame(self.root, padding=12)
-        main.grid(sticky="nsew")
+        # ── Notebook (tabs) ──────────────────────────────────────────────
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.grid(sticky="nsew", padx=8, pady=8)
 
-        # ── Pack folder ──────────────────────────────────────────────────
+        self.single_tab = ttk.Frame(self.notebook, padding=12)
+        self.batch_tab = ttk.Frame(self.notebook, padding=12)
+        self.notebook.add(self.single_tab, text="  Single Model  ")
+        self.notebook.add(self.batch_tab, text="  Batch Mode  ")
+
+        # ══════════════════════════════════════════════════════════════════
+        # SINGLE TAB
+        # ══════════════════════════════════════════════════════════════════
+        main = self.single_tab
+
         row = 0
         ttk.Label(main, text="Resource Pack Folder", font=("", 9, "bold")).grid(
             row=row, column=0, columnspan=3, sticky="w", **wide_pad
         )
 
         row += 1
-        pack_entry = ttk.Entry(main, textvariable=self.pack_path, width=55)
-        pack_entry.grid(row=row, column=0, columnspan=2, sticky="ew", **pad)
+        ttk.Entry(main, textvariable=self.pack_path, width=55).grid(
+            row=row, column=0, columnspan=2, sticky="ew", **pad
+        )
         ttk.Button(main, text="Browse…", width=10, command=self._browse_pack).grid(
             row=row, column=2, **pad
         )
 
-        # ── BBModel file ────────────────────────────────────────────────
         row += 1
         ttk.Label(main, text="BBModel File", font=("", 9, "bold")).grid(
             row=row, column=0, columnspan=3, sticky="w", **wide_pad
@@ -375,7 +406,6 @@ class FruitbowlApp:
             row=row, column=2, **pad
         )
 
-        # ── Model name ──────────────────────────────────────────────────
         row += 1
         ttk.Label(main, text="Model Name (leave blank to use filename)", font=("", 9, "bold")).grid(
             row=row, column=0, columnspan=3, sticky="w", **wide_pad
@@ -386,7 +416,6 @@ class FruitbowlApp:
             row=row, column=0, columnspan=2, sticky="ew", **pad
         )
 
-        # ── Item type ───────────────────────────────────────────────────
         row += 1
         ttk.Label(main, text="Minecraft Item", font=("", 9, "bold")).grid(
             row=row, column=0, columnspan=3, sticky="w", **wide_pad
@@ -399,38 +428,115 @@ class FruitbowlApp:
         )
         self.item_combo.grid(row=row, column=0, columnspan=2, sticky="ew", **pad)
 
-        # ── Buttons ─────────────────────────────────────────────────────
         row += 1
         btn_frame = ttk.Frame(main)
         btn_frame.grid(row=row, column=0, columnspan=3, pady=(16, 4))
+        ttk.Button(btn_frame, text="  Add to Pack  ", command=self._run_single).pack(side="left", padx=4)
 
-        self.add_btn = ttk.Button(btn_frame, text="  Add to Pack  ", command=self._run)
-        self.add_btn.pack(side="left", padx=4)
-
-        # ── Log output ──────────────────────────────────────────────────
         row += 1
         ttk.Label(main, text="Output", font=("", 9, "bold")).grid(
             row=row, column=0, columnspan=3, sticky="w", **wide_pad
         )
 
         row += 1
-        self.log_text = tk.Text(main, height=10, width=65, state="disabled",
+        self.log_text = tk.Text(main, height=12, width=65, state="disabled",
                                 bg="#1e1e1e", fg="#cccccc", font=("Consolas", 9),
                                 relief="flat", borderwidth=1)
         self.log_text.grid(row=row, column=0, columnspan=3, **pad)
 
-        # Tag configs for coloured log lines
         self.log_text.tag_configure("success", foreground="#6bcf6b")
         self.log_text.tag_configure("warn", foreground="#e8c85a")
         self.log_text.tag_configure("error", foreground="#e85a5a")
         self.log_text.tag_configure("info", foreground="#7ab0df")
+        self.log_text.tag_configure("header", foreground="#ffffff", font=("Consolas", 9, "bold"))
+
+        # ══════════════════════════════════════════════════════════════════
+        # BATCH TAB
+        # ══════════════════════════════════════════════════════════════════
+        batch = self.batch_tab
+
+        row = 0
+        ttk.Label(batch, text="Resource Pack Folder", font=("", 9, "bold")).grid(
+            row=row, column=0, columnspan=3, sticky="w", **wide_pad
+        )
+
+        row += 1
+        ttk.Entry(batch, textvariable=self.pack_path, width=55).grid(
+            row=row, column=0, columnspan=2, sticky="ew", **pad
+        )
+        ttk.Button(batch, text="Browse…", width=10, command=self._browse_pack).grid(
+            row=row, column=2, **pad
+        )
+
+        row += 1
+        ttk.Label(batch, text="Minecraft Item (applied to all files in batch)", font=("", 9, "bold")).grid(
+            row=row, column=0, columnspan=3, sticky="w", **wide_pad
+        )
+
+        row += 1
+        self.batch_item_combo = ttk.Combobox(
+            batch, textvariable=self.item_type,
+            values=self.available_items, width=52, state="normal"
+        )
+        self.batch_item_combo.grid(row=row, column=0, columnspan=2, sticky="ew", **pad)
+
+        row += 1
+        ttk.Label(batch, text="BBModel Files", font=("", 9, "bold")).grid(
+            row=row, column=0, columnspan=3, sticky="w", **wide_pad
+        )
+
+        row += 1
+        list_frame = ttk.Frame(batch)
+        list_frame.grid(row=row, column=0, columnspan=2, sticky="nsew", **pad)
+
+        self.batch_listbox = tk.Listbox(list_frame, height=8, width=55,
+                                         bg="#1e1e1e", fg="#cccccc",
+                                         font=("Consolas", 9),
+                                         selectmode="extended",
+                                         relief="flat", borderwidth=1)
+        batch_scroll = ttk.Scrollbar(list_frame, orient="vertical", command=self.batch_listbox.yview)
+        self.batch_listbox.configure(yscrollcommand=batch_scroll.set)
+        self.batch_listbox.pack(side="left", fill="both", expand=True)
+        batch_scroll.pack(side="right", fill="y")
+
+        btn_col = ttk.Frame(batch)
+        btn_col.grid(row=row, column=2, sticky="n", **pad)
+        ttk.Button(btn_col, text="Add Files…", width=12, command=self._batch_add_files).pack(pady=2)
+        ttk.Button(btn_col, text="Add Folder…", width=12, command=self._batch_add_folder).pack(pady=2)
+        ttk.Button(btn_col, text="Remove", width=12, command=self._batch_remove).pack(pady=2)
+        ttk.Button(btn_col, text="Clear All", width=12, command=self._batch_clear).pack(pady=2)
+
+        row += 1
+        self.batch_count_label = ttk.Label(batch, text="0 files loaded", font=("", 8))
+        self.batch_count_label.grid(row=row, column=0, columnspan=2, sticky="w", **pad)
+
+        row += 1
+        batch_btn_frame = ttk.Frame(batch)
+        batch_btn_frame.grid(row=row, column=0, columnspan=3, pady=(12, 4))
+        ttk.Button(batch_btn_frame, text="  Add All to Pack  ", command=self._run_batch).pack(side="left", padx=4)
+
+        row += 1
+        ttk.Label(batch, text="Output", font=("", 9, "bold")).grid(
+            row=row, column=0, columnspan=3, sticky="w", **wide_pad
+        )
+
+        row += 1
+        self.batch_log = tk.Text(batch, height=12, width=65, state="disabled",
+                                  bg="#1e1e1e", fg="#cccccc", font=("Consolas", 9),
+                                  relief="flat", borderwidth=1)
+        self.batch_log.grid(row=row, column=0, columnspan=3, **pad)
+
+        self.batch_log.tag_configure("success", foreground="#6bcf6b")
+        self.batch_log.tag_configure("warn", foreground="#e8c85a")
+        self.batch_log.tag_configure("error", foreground="#e85a5a")
+        self.batch_log.tag_configure("info", foreground="#7ab0df")
+        self.batch_log.tag_configure("header", foreground="#ffffff", font=("Consolas", 9, "bold"))
 
     # ── Dialogs ──────────────────────────────────────────────────────────
 
     def _browse_pack(self):
         path = filedialog.askdirectory(title="Select resource pack folder")
         if path:
-            # Validate it looks like a pack
             if not os.path.exists(os.path.join(path, "pack.mcmeta")):
                 messagebox.showwarning(
                     "Not a resource pack",
@@ -450,7 +556,6 @@ class FruitbowlApp:
         )
         if path:
             self.bbmodel_path.set(path)
-            # Auto-fill model name from filename
             if not self.model_name.get():
                 self.model_name.set(sanitize_name(os.path.basename(path)))
 
@@ -459,70 +564,197 @@ class FruitbowlApp:
         if pack and os.path.isdir(pack):
             self.available_items = scan_pack_items(pack)
             self.item_combo["values"] = self.available_items
+            self.batch_item_combo["values"] = self.available_items
 
-    # ── Logging ──────────────────────────────────────────────────────────
+    # ── Batch list management ────────────────────────────────────────────
 
-    def _log(self, msg: str, tag: str = "info"):
-        self.log_text.configure(state="normal")
-        self.log_text.insert("end", msg + "\n", tag)
-        self.log_text.see("end")
-        self.log_text.configure(state="disabled")
+    def _batch_add_files(self):
+        paths = filedialog.askopenfilenames(
+            title="Select .bbmodel files",
+            filetypes=[("Blockbench Models", "*.bbmodel"), ("All Files", "*.*")]
+        )
+        if paths:
+            for p in paths:
+                if p not in self.batch_files:
+                    self.batch_files.append(p)
+            self._batch_refresh_list()
 
-    def _log_clear(self):
-        self.log_text.configure(state="normal")
-        self.log_text.delete("1.0", "end")
-        self.log_text.configure(state="disabled")
+    def _batch_add_folder(self):
+        folder = filedialog.askdirectory(title="Select folder containing .bbmodel files")
+        if folder:
+            for f in sorted(os.listdir(folder)):
+                if f.lower().endswith(".bbmodel"):
+                    full = os.path.join(folder, f)
+                    if full not in self.batch_files:
+                        self.batch_files.append(full)
+            self._batch_refresh_list()
 
-    # ── Run ──────────────────────────────────────────────────────────────
+    def _batch_remove(self):
+        selected = list(self.batch_listbox.curselection())
+        if not selected:
+            return
+        for i in reversed(selected):
+            self.batch_files.pop(i)
+        self._batch_refresh_list()
 
-    def _run(self):
-        self._log_clear()
+    def _batch_clear(self):
+        self.batch_files.clear()
+        self._batch_refresh_list()
+
+    def _batch_refresh_list(self):
+        self.batch_listbox.delete(0, "end")
+        for f in self.batch_files:
+            self.batch_listbox.insert("end", os.path.basename(f))
+        count = len(self.batch_files)
+        self.batch_count_label.configure(text=f"{count} file{'s' if count != 1 else ''} loaded")
+
+    # ── Logging helpers ──────────────────────────────────────────────────
+
+    def _log_to(self, widget: tk.Text, msg: str, tag: str = "info"):
+        widget.configure(state="normal")
+        widget.insert("end", msg + "\n", tag)
+        widget.see("end")
+        widget.configure(state="disabled")
+
+    def _log_clear_widget(self, widget: tk.Text):
+        widget.configure(state="normal")
+        widget.delete("1.0", "end")
+        widget.configure(state="disabled")
+
+    # ── Single mode ──────────────────────────────────────────────────────
+
+    def _run_single(self):
+        self._log_clear_widget(self.log_text)
 
         bbmodel = self.bbmodel_path.get().strip()
         pack = self.pack_path.get().strip()
         item = self.item_type.get().strip().lower().replace(" ", "_")
         name = self.model_name.get().strip() or None
 
-        # Validate
         if not pack:
-            self._log("ERROR: Select a resource pack folder first.", "error")
+            self._log_to(self.log_text, "ERROR: Select a resource pack folder first.", "error")
             return
         if not os.path.isdir(pack):
-            self._log(f"ERROR: Pack folder not found: {pack}", "error")
+            self._log_to(self.log_text, f"ERROR: Pack folder not found: {pack}", "error")
             return
         if not bbmodel:
-            self._log("ERROR: Select a .bbmodel file first.", "error")
+            self._log_to(self.log_text, "ERROR: Select a .bbmodel file first.", "error")
             return
         if not os.path.isfile(bbmodel):
-            self._log(f"ERROR: File not found: {bbmodel}", "error")
+            self._log_to(self.log_text, f"ERROR: File not found: {bbmodel}", "error")
             return
         if not item:
-            self._log("ERROR: Select a Minecraft item type.", "error")
+            self._log_to(self.log_text, "ERROR: Select a Minecraft item type.", "error")
             return
 
-        display_name = sanitize_name(name if name else os.path.basename(bbmodel))
-        self._log(f"Adding '{display_name}' to {item}...", "info")
-        self._log("")
+        # Check for existing files and confirm overwrite
+        model_name = sanitize_name(name if name else os.path.basename(bbmodel))
+        existing = check_existing(pack, model_name)
+        if existing:
+            msg = (
+                f"Model '{model_name}' already exists in the pack.\n"
+                f"The following files will be overwritten:\n\n"
+                + "\n".join(f"  • {e}" for e in existing)
+                + "\n\nContinue?"
+            )
+            if not messagebox.askyesno("Overwrite existing model?", msg):
+                self._log_to(self.log_text, "Cancelled by user.", "warn")
+                return
 
         try:
             messages = add_to_pack(bbmodel, pack, item, name)
-            for msg in messages:
-                if msg.startswith("✓"):
-                    self._log(msg, "success")
-                elif msg.startswith("⚠"):
-                    self._log(msg, "warn")
-                else:
-                    self._log(msg, "info")
+            for tag, msg in messages:
+                self._log_to(self.log_text, msg, tag)
         except Exception as e:
-            self._log(f"ERROR: {e}", "error")
+            self._log_to(self.log_text, f"ERROR: {e}", "error")
+
+    # ── Batch mode ───────────────────────────────────────────────────────
+
+    def _run_batch(self):
+        self._log_clear_widget(self.batch_log)
+
+        pack = self.pack_path.get().strip()
+        item = self.item_type.get().strip().lower().replace(" ", "_")
+
+        if not pack:
+            self._log_to(self.batch_log, "ERROR: Select a resource pack folder first.", "error")
+            return
+        if not os.path.isdir(pack):
+            self._log_to(self.batch_log, f"ERROR: Pack folder not found: {pack}", "error")
+            return
+        if not item:
+            self._log_to(self.batch_log, "ERROR: Select a Minecraft item type.", "error")
+            return
+        if not self.batch_files:
+            self._log_to(self.batch_log, "ERROR: No files loaded. Add some .bbmodel files first.", "error")
+            return
+
+        # Pre-scan for overwrites
+        overwrites = []
+        for f in self.batch_files:
+            name = sanitize_name(os.path.basename(f))
+            existing = check_existing(pack, name)
+            if existing:
+                overwrites.append(name)
+
+        if overwrites:
+            msg = (
+                f"{len(overwrites)} model(s) already exist and will be updated:\n\n"
+                + "\n".join(f"  • {n}" for n in overwrites)
+                + "\n\nContinue?"
+            )
+            if not messagebox.askyesno("Overwrite existing models?", msg):
+                self._log_to(self.batch_log, "Cancelled by user.", "warn")
+                return
+
+        # Process all files
+        total = len(self.batch_files)
+        success_count = 0
+        update_count = 0
+        fail_count = 0
+
+        self._log_to(self.batch_log, f"Processing {total} file(s) → {item}", "header")
+        self._log_to(self.batch_log, "─" * 50, "info")
+
+        for i, filepath in enumerate(self.batch_files, 1):
+            basename = os.path.basename(filepath)
+            name = sanitize_name(basename)
+            self._log_to(self.batch_log, f"[{i}/{total}] {basename} → {name}", "header")
+
+            try:
+                existing = check_existing(pack, name)
+                is_update = bool(existing)
+                messages = add_to_pack(filepath, pack, item, name)
+                for tag, msg in messages:
+                    self._log_to(self.batch_log, f"  {msg}", tag)
+                if is_update:
+                    update_count += 1
+                else:
+                    success_count += 1
+            except Exception as e:
+                self._log_to(self.batch_log, f"  ERROR: {e}", "error")
+                fail_count += 1
+
+        # Summary
+        self._log_to(self.batch_log, "", "info")
+        self._log_to(self.batch_log, "─" * 50, "info")
+        parts = []
+        if success_count:
+            parts.append(f"{success_count} added")
+        if update_count:
+            parts.append(f"{update_count} updated")
+        if fail_count:
+            parts.append(f"{fail_count} failed")
+        summary = f"Done! {', '.join(parts)}."
+        tag = "error" if fail_count else "success"
+        self._log_to(self.batch_log, summary, tag)
+        self._log_to(self.batch_log, "Reload pack in-game with F3+T", "info")
 
 
 def main():
     root = tk.Tk()
 
-    # Try to set a Windows-native look
     try:
-        root.tk.call("tk", "windowingsystem")  # just to check
         style = ttk.Style()
         if "vista" in style.theme_names():
             style.theme_use("vista")

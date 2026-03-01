@@ -16,7 +16,8 @@ Does in one click what used to be 6 manual steps.
 
 It also:
 - Auto-assigns the next available `threshold` number
-- Detects duplicates (won't add the same model twice)
+- Detects duplicates (won't double-register in the dispatch file)
+- **Warns before overwriting** existing models with a confirmation dialog
 - Sanitizes filenames (lowercase, no spaces/special chars)
 - Remembers your pack folder between sessions
 
@@ -28,14 +29,30 @@ No extra packages needed — just standard library.
 
 ## Usage
 
-1. Download or clone this repo
-2. Double-click `fruitbowl_tool.py` (or run `python fruitbowl_tool.py`)
-3. Select your resource pack folder (the one containing `pack.mcmeta`)
-4. Select a `.bbmodel` file
-5. Pick the Minecraft item type from the dropdown (e.g. `stone_button` for hats)
-6. Click **Add to Pack**
+### Single Model
 
-The tool will tell you the threshold number to use in-game:
+1. Double-click `fruitbowl_tool.py` (or run `python fruitbowl_tool.py`)
+2. Select your resource pack folder (the one containing `pack.mcmeta`)
+3. Select a `.bbmodel` file
+4. Pick the Minecraft item type from the dropdown (e.g. `stone_button` for hats)
+5. Click **Add to Pack**
+
+### Batch Mode
+
+For adding multiple models at once:
+
+1. Switch to the **Batch Mode** tab
+2. Select your resource pack folder
+3. Pick the Minecraft item type (applies to all files)
+4. Click **Add Files…** to pick individual `.bbmodel` files, or **Add Folder…** to load all `.bbmodel` files from a directory
+5. Remove any you don't want with **Remove** or **Clear All**
+6. Click **Add All to Pack**
+
+The tool will process every file, warn you about any that already exist, and show a summary at the end.
+
+### In-game
+
+The output tells you the threshold number for each model:
 ```
 /trigger CustomModelData set <number>
 ```
