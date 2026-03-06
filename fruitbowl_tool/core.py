@@ -89,8 +89,8 @@ def build_model_json(bbmodel: dict, model_name: str) -> dict:
     elements = []
     for el in bbmodel.get("elements", []):
         inflate = el.get("inflate", 0)
-        el_from = [c - inflate for c in el["from"]]
-        el_to = [c + inflate for c in el["to"]]
+        el_from = [round(c - inflate, 4) for c in el["from"]]
+        el_to = [round(c + inflate, 4) for c in el["to"]]
 
         entry = {
             "from": el_from,
@@ -98,18 +98,22 @@ def build_model_json(bbmodel: dict, model_name: str) -> dict:
             "faces": {},
         }
 
-        # Rotation — MC only supports one axis per element
+        # Rotation — MC only supports one axis per element,
+        # and only angles: -45, -22.5, 0, 22.5, 45
         if "rotation" in el and "origin" in el:
             rot = el["rotation"]
             origin = el["origin"]
+            valid_angles = [-45, -22.5, 0, 22.5, 45]
             axes = ["x", "y", "z"]
             for i, axis in enumerate(axes):
                 if rot[i] != 0:
-                    entry["rotation"] = {
-                        "angle": rot[i],
-                        "axis": axis,
-                        "origin": origin,
-                    }
+                    angle = min(valid_angles, key=lambda a: abs(a - rot[i]))
+                    if angle != 0:
+                        entry["rotation"] = {
+                            "angle": angle,
+                            "axis": axis,
+                            "origin": origin,
+                        }
                     break
 
         # Faces
@@ -170,7 +174,7 @@ def update_minecraft_item(mc_item_path: str, model_name: str, mc_item_id: str) -
         with open(mc_item_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         entries = data["model"]["entries"]
-        next_threshold = max(e["threshold"] for e in entries) + 1
+        next_threshold = max((e["threshold"] for e in entries), default=0) + 1
     else:
         # Block-type items need a block model fallback, not item model
         fallback_model = BLOCK_ITEM_FALLBACKS.get(
