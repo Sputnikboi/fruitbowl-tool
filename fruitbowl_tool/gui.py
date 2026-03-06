@@ -14,6 +14,7 @@ from .core import (
     add_to_pack,
 )
 from .manage import scan_all_models, delete_model
+from .deploy import zip_pack, compute_sha1, update_server_properties, deploy_to_mcpacks
 
 
 class FruitbowlApp:
@@ -63,10 +64,13 @@ class FruitbowlApp:
         self.notebook.add(self.single_tab, text="  Single Model  ")
         self.notebook.add(self.batch_tab, text="  Batch Mode  ")
         self.notebook.add(self.manage_tab, text="  Manage Pack  ")
+        self.deploy_tab = ttk.Frame(self.notebook, padding=12)
+        self.notebook.add(self.deploy_tab, text="  Deploy  ")
 
         self._build_single_tab(pad, wide_pad)
         self._build_batch_tab(pad, wide_pad)
         self._build_manage_tab(pad, wide_pad)
+        self._build_deploy_tab(pad, wide_pad)
 
     def _build_single_tab(self, pad, wide_pad):
         main = self.single_tab
@@ -875,6 +879,193 @@ class FruitbowlApp:
         # Auto-rescan
         self.manage_models = scan_all_models(pack)
         self._manage_populate_tree()
+
+
+
+    def _build_deploy_tab(self, pad, wide_pad):
+        deploy = self.deploy_tab
+        row = 0
+
+        # -- Server directory --
+        ttk.Label(deploy, text="Minecraft Server Directory:").grid(
+            row=row, column=0, sticky="w", **pad)
+        self.deploy_server_var = tk.StringVar(
+            value=self.settings.get("server_dir", ""))
+        entry = ttk.Entry(deploy, textvariable=self.deploy_server_var, width=52)
+        entry.grid(row=row, column=1, sticky="ew", **pad)
+        ttk.Button(deploy, text="Browse…",
+                   command=self._deploy_browse_server).grid(
+            row=row, column=2, **pad)
+        row += 1
+
+        # -- Buttons row --
+        btn_frame = ttk.Frame(deploy)
+        btn_frame.grid(row=row, column=0, columnspan=3, sticky="ew", pady=(10, 5))
+
+        ttk.Button(btn_frame, text="📦 Zip Pack",
+                   command=self._deploy_zip).pack(side="left", padx=(0, 5))
+        ttk.Button(btn_frame, text="🚀 Deploy to Server",
+                   command=self._deploy_full).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="🔄 Restart Server",
+                   command=self._deploy_restart).pack(side="left", padx=5)
+        row += 1
+
+        # -- Info labels --
+        info_frame = ttk.LabelFrame(deploy, text="Pack Info", padding=8)
+        info_frame.grid(row=row, column=0, columnspan=3, sticky="ew", pady=(10, 5))
+
+        ttk.Label(info_frame, text="SHA1:").grid(row=0, column=0, sticky="w")
+        self.deploy_sha1_var = tk.StringVar(value="—")
+        sha1_label = ttk.Label(info_frame, textvariable=self.deploy_sha1_var,
+                               font=("Consolas", 9))
+        sha1_label.grid(row=0, column=1, sticky="w", padx=(5, 0))
+
+        ttk.Label(info_frame, text="URL:").grid(row=1, column=0, sticky="w")
+        self.deploy_url_var = tk.StringVar(value="—")
+        url_label = ttk.Label(info_frame, textvariable=self.deploy_url_var,
+                              font=("Consolas", 9))
+        url_label.grid(row=1, column=1, sticky="w", padx=(5, 0))
+
+        ttk.Label(info_frame, text="Size:").grid(row=2, column=0, sticky="w")
+        self.deploy_size_var = tk.StringVar(value="—")
+        ttk.Label(info_frame, textvariable=self.deploy_size_var).grid(
+            row=2, column=1, sticky="w", padx=(5, 0))
+        row += 1
+
+        # -- Log area --
+        self.deploy_log = tk.Text(deploy, height=14, width=80,
+                                  state="disabled", wrap="word",
+                                  bg="#1e1e1e", fg="#d4d4d4",
+                                  font=("Consolas", 9))
+        self.deploy_log.grid(row=row, column=0, columnspan=3,
+                             sticky="nsew", **pad)
+        self.deploy_log.tag_configure("success", foreground="#4ec9b0")
+        self.deploy_log.tag_configure("error", foreground="#f44747")
+        self.deploy_log.tag_configure("warn", foreground="#dcdcaa")
+        self.deploy_log.tag_configure("info", foreground="#9cdcfe")
+        self.deploy_log.tag_configure("header", foreground="#569cd6",
+                                      font=("Consolas", 9, "bold"))
+
+        deploy.columnconfigure(1, weight=1)
+        deploy.rowconfigure(row, weight=1)
+
+    def _deploy_browse_server(self):
+        d = filedialog.askdirectory(title="Select Minecraft Server Directory")
+        if d:
+            self.deploy_server_var.set(d)
+            self.settings["server_dir"] = d
+            save_settings(self.settings)
+
+    def _deploy_zip(self):
+        pack = self.settings.get("pack_path", "")
+        if not pack or not os.path.isdir(pack):
+            messagebox.showerror("Error", "Set a valid pack path first (Single Model tab).")
+            return
+
+        self._log_clear(self.deploy_log)
+        self._log_to(self.deploy_log, "Zipping pack…", "header")
+
+        try:
+            zip_path = zip_pack(pack)
+            sha1 = compute_sha1(zip_path)
+            size = os.path.getsize(zip_path)
+
+            self.deploy_sha1_var.set(sha1)
+            self.deploy_url_var.set(f"https://download.mc-packs.net/pack/{sha1}.zip")
+            self.deploy_size_var.set(f"{size / 1024:.0f} KB")
+
+            self._log_to(self.deploy_log, f"✓ Zip created: {zip_path}", "success")
+            self._log_to(self.deploy_log, f"✓ SHA1: {sha1}", "success")
+            self._log_to(self.deploy_log, f"✓ Size: {size // 1024} KB", "success")
+            self._log_to(self.deploy_log, "", "info")
+            self._log_to(self.deploy_log,
+                         "Upload to https://mc-packs.net/ then click 'Deploy to Server'.",
+                         "info")
+
+            # Store for later use
+            self._deploy_zip_path = zip_path
+            self._deploy_sha1 = sha1
+
+        except Exception as e:
+            self._log_to(self.deploy_log, f"ERROR: {e}", "error")
+
+    def _deploy_full(self):
+        pack = self.settings.get("pack_path", "")
+        server_dir = self.deploy_server_var.get()
+
+        if not pack or not os.path.isdir(pack):
+            messagebox.showerror("Error", "Set a valid pack path first (Single Model tab).")
+            return
+        if not server_dir or not os.path.isdir(server_dir):
+            messagebox.showerror("Error", "Set a valid Minecraft server directory.")
+            return
+
+        props_path = os.path.join(server_dir, "server.properties")
+        if not os.path.exists(props_path):
+            messagebox.showerror("Error",
+                                 f"server.properties not found in:\n{server_dir}")
+            return
+
+        self._log_clear(self.deploy_log)
+        self._log_to(self.deploy_log, "Deploying to server…", "header")
+
+        try:
+            # Zip and hash
+            zip_path = zip_pack(pack)
+            sha1 = compute_sha1(zip_path)
+            size = os.path.getsize(zip_path)
+
+            self.deploy_sha1_var.set(sha1)
+            url = f"https://download.mc-packs.net/pack/{sha1}.zip"
+            self.deploy_url_var.set(url)
+            self.deploy_size_var.set(f"{size / 1024:.0f} KB")
+
+            self._log_to(self.deploy_log,
+                         f"✓ Packed ({size // 1024} KB), SHA1: {sha1}", "success")
+
+            # Update server.properties
+            msgs = update_server_properties(server_dir, url, sha1)
+            for tag, msg in msgs:
+                self._log_to(self.deploy_log, msg, tag)
+
+            self._log_to(self.deploy_log, "", "info")
+            self._log_to(self.deploy_log,
+                         "⚠ Remember to upload the zip to mc-packs.net!", "warn")
+            self._log_to(self.deploy_log, f"  Zip: {zip_path}", "info")
+            self._log_to(self.deploy_log,
+                         "  Restart the server for changes to take effect.", "info")
+
+            self._deploy_zip_path = zip_path
+            self._deploy_sha1 = sha1
+
+        except Exception as e:
+            self._log_to(self.deploy_log, f"ERROR: {e}", "error")
+
+    def _deploy_restart(self):
+        self._log_clear(self.deploy_log)
+        self._log_to(self.deploy_log, "Restarting Minecraft server…", "header")
+
+        try:
+            result = subprocess.run(
+                ["systemctl", "--user", "restart", "minecraft.service"],
+                capture_output=True, text=True, timeout=15)
+            if result.returncode == 0:
+                self._log_to(self.deploy_log,
+                             "✓ Server restart command sent.", "success")
+            else:
+                self._log_to(self.deploy_log,
+                             f"⚠ Restart returned code {result.returncode}", "warn")
+                if result.stderr:
+                    self._log_to(self.deploy_log, result.stderr.strip(), "error")
+        except FileNotFoundError:
+            self._log_to(self.deploy_log,
+                         "⚠ systemctl not found — restart server manually.", "warn")
+        except subprocess.TimeoutExpired:
+            self._log_to(self.deploy_log,
+                         "✓ Restart command sent (timed out waiting for response).",
+                         "success")
+        except Exception as e:
+            self._log_to(self.deploy_log, f"ERROR: {e}", "error")
 
 
 def main():
