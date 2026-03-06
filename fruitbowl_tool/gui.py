@@ -4,6 +4,7 @@ tkinter interface with Single Model, Batch Mode, and Manage Pack tabs.
 """
 
 import os
+import subprocess
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
