@@ -191,16 +191,60 @@ def update_minecraft_item(mc_item_path: str, model_name: str, mc_item_id: str) -
         next_threshold = 1
 
     for e in entries:
-        if e["model"].get("model") == f"fruitbowl:item/{model_name}":
+        m = e.get("model", {})
+        # Check both simple models and condition/select wrappers
+        if m.get("model") == f"fruitbowl:item/{model_name}":
             return e["threshold"], True
+        # Check inside condition wrappers (trident/bow)
+        for key in ("on_true", "on_false"):
+            if m.get(key, {}).get("model") == f"fruitbowl:item/{model_name}":
+                return e["threshold"], True
 
-    entries.append({
-        "model": {
-            "type": "minecraft:model",
-            "model": f"fruitbowl:item/{model_name}",
-        },
-        "threshold": next_threshold,
-    })
+    # Items that need special dispatch entries
+    if mc_item_id == "trident":
+        # Trident needs using_item condition so throwing orientation works
+        new_entry = {
+            "threshold": next_threshold,
+            "model": {
+                "type": "minecraft:condition",
+                "property": "minecraft:using_item",
+                "on_true": {
+                    "type": "minecraft:model",
+                    "model": f"fruitbowl:item/{model_name}",
+                },
+                "on_false": {
+                    "type": "minecraft:model",
+                    "model": f"fruitbowl:item/{model_name}",
+                },
+            },
+        }
+    elif mc_item_id == "bow":
+        # Bow needs using_item condition so pulling state works
+        new_entry = {
+            "threshold": next_threshold,
+            "model": {
+                "type": "minecraft:condition",
+                "property": "minecraft:using_item",
+                "on_true": {
+                    "type": "minecraft:model",
+                    "model": f"fruitbowl:item/{model_name}",
+                },
+                "on_false": {
+                    "type": "minecraft:model",
+                    "model": f"fruitbowl:item/{model_name}",
+                },
+            },
+        }
+    else:
+        new_entry = {
+            "threshold": next_threshold,
+            "model": {
+                "type": "minecraft:model",
+                "model": f"fruitbowl:item/{model_name}",
+            },
+        }
+
+    entries.append(new_entry)
 
     with open(mc_item_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
