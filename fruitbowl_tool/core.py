@@ -88,9 +88,13 @@ def build_model_json(bbmodel: dict, model_name: str) -> dict:
     # Convert elements
     elements = []
     for el in bbmodel.get("elements", []):
+        inflate = el.get("inflate", 0)
+        el_from = [c - inflate for c in el["from"]]
+        el_to = [c + inflate for c in el["to"]]
+
         entry = {
-            "from": el["from"],
-            "to": el["to"],
+            "from": el_from,
+            "to": el_to,
             "faces": {},
         }
 
