@@ -98,22 +98,18 @@ def build_model_json(bbmodel: dict, model_name: str) -> dict:
             "faces": {},
         }
 
-        # Rotation — MC only supports one axis per element,
-        # and only angles: -45, -22.5, 0, 22.5, 45
+        # Rotation — MC only supports one axis per element
         if "rotation" in el and "origin" in el:
             rot = el["rotation"]
             origin = el["origin"]
-            valid_angles = [-45, -22.5, 0, 22.5, 45]
             axes = ["x", "y", "z"]
             for i, axis in enumerate(axes):
                 if rot[i] != 0:
-                    angle = min(valid_angles, key=lambda a: abs(a - rot[i]))
-                    if angle != 0:
-                        entry["rotation"] = {
-                            "angle": angle,
-                            "axis": axis,
-                            "origin": origin,
-                        }
+                    entry["rotation"] = {
+                        "angle": rot[i],
+                        "axis": axis,
+                        "origin": origin,
+                    }
                     break
 
         # Faces
