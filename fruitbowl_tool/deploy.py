@@ -1,7 +1,6 @@
 """
 Deploy logic for the Fruitbowl Resource Pack Tool.
-Zip the pack, compute SHA1, upload to mc-packs.net (manual) or
-self-host via the Minecraft server's BlueMap webroot, and update
+Zip the pack, compute SHA1, upload to GitHub Releases, and update
 server.properties accordingly.
 """
 
@@ -12,6 +11,11 @@ import re
 import shutil
 import subprocess
 import zipfile
+
+# GitHub release config
+GH_REPO = "Sputnikboi/fruitbowl-tool"
+GH_RELEASE_TAG = "pack-v1"
+GH_ASSET_NAME = "fruitbowl-server-pack.zip"
 
 
 def zip_pack(pack_root: str, output_path: str | None = None) -> str:
@@ -68,12 +72,57 @@ def compute_sha1(file_path: str) -> str:
     return sha1.hexdigest()
 
 
+def get_pack_url() -> str:
+    """Get the GitHub Releases download URL for the pack."""
+    return f"https://github.com/{GH_REPO}/releases/download/{GH_RELEASE_TAG}/{GH_ASSET_NAME}"
+
+
+def upload_to_github(zip_path: str) -> list[tuple[str, str]]:
+    """
+    Upload the pack zip to GitHub Releases, replacing any existing asset.
+    Requires `gh` CLI to be installed and authenticated.
+    Returns a list of (tag, message) log tuples.
+    """
+    log = []
+
+    # Check gh is available
+    try:
+        result = subprocess.run(
+            ["gh", "--version"], capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            return [("error", "gh CLI not found. Install with: sudo apt install gh")]
+    except FileNotFoundError:
+        return [("error", "gh CLI not found. Install with: sudo apt install gh")]
+
+    # Delete existing asset if present (gh will error on duplicate names)
+    subprocess.run(
+        ["gh", "release", "delete-asset", GH_RELEASE_TAG, GH_ASSET_NAME,
+         "--repo", GH_REPO, "--yes"],
+        capture_output=True, text=True, timeout=30)
+    log.append(("info", "  Removed old asset (if any)"))
+
+    # Upload new asset
+    result = subprocess.run(
+        ["gh", "release", "upload", GH_RELEASE_TAG, zip_path,
+         "--repo", GH_REPO, "--clobber"],
+        capture_output=True, text=True, timeout=120)
+
+    if result.returncode == 0:
+        url = get_pack_url()
+        log.append(("success", f"✓ Uploaded to GitHub Releases"))
+        log.append(("success", f"✓ URL: {url}"))
+    else:
+        log.append(("error", f"Upload failed: {result.stderr.strip()}"))
+
+    return log
+
+
 def update_server_properties(
     server_dir: str,
     pack_url: str,
     sha1: str,
     require: bool = True,
-    prompt: str = "Please enable the Fruitbowl resource pack!",
+    prompt: str = "",
 ) -> list[tuple[str, str]]:
     """
     Update server.properties with the resource pack URL and SHA1.
@@ -88,11 +137,8 @@ def update_server_properties(
     with open(props_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
 
-    # Escape colons in URL for Java properties format
-    escaped_url = pack_url.replace(":", "\\:")
-
     replacements = {
-        "resource-pack=": f"resource-pack={escaped_url}\n",
+        "resource-pack=": f"resource-pack={pack_url}\n",
         "resource-pack-sha1=": f"resource-pack-sha1={sha1}\n",
         "require-resource-pack=": f"require-resource-pack={'true' if require else 'false'}\n",
         "resource-pack-prompt=": f"resource-pack-prompt={prompt}\n",
@@ -126,98 +172,39 @@ def update_server_properties(
     return log
 
 
-def deploy_to_bluemap(
+def deploy_full(
     pack_root: str,
     server_dir: str,
-    bluemap_port: int | None = None,
 ) -> list[tuple[str, str]]:
     """
-    Zip the pack, copy to BlueMap webroot, and update server.properties
-    to serve it from the BlueMap web server.
+    Full deploy: zip -> upload to GitHub -> update server.properties.
     Returns a list of (tag, message) log tuples.
     """
     log = []
 
-    # 1 — Zip the pack
+    # 1 - Zip
     zip_path = zip_pack(pack_root)
     zip_size = os.path.getsize(zip_path)
-    log.append(("success", f"✓ Packed → {os.path.basename(zip_path)} ({zip_size // 1024}KB)"))
+    log.append(("success", f"✓ Packed ({zip_size // 1024} KB)"))
 
-    # 2 — SHA1
+    # 2 - SHA1
     sha1 = compute_sha1(zip_path)
     log.append(("success", f"✓ SHA1: {sha1}"))
 
-    # 3 — Find BlueMap webroot
-    webroot = os.path.join(server_dir, "bluemap", "web")
-    if not os.path.isdir(webroot):
-        log.append(("warn", "⚠ BlueMap webroot not found — zip created but not deployed"))
-        log.append(("info", f"  Zip is at: {zip_path}"))
-        log.append(("info", "  Upload manually to mc-packs.net"))
+    # 3 - Upload to GitHub
+    upload_log = upload_to_github(zip_path)
+    log.extend(upload_log)
+
+    # Check if upload succeeded
+    if any(tag == "error" for tag, _ in upload_log):
         return log
 
-    # Copy zip to webroot
-    dest = os.path.join(webroot, "fruitbowl-pack.zip")
-    shutil.copy2(zip_path, dest)
-    log.append(("success", f"✓ Copied to BlueMap webroot"))
+    # 4 - Update server.properties
+    url = get_pack_url()
+    props_log = update_server_properties(server_dir, url, sha1)
+    log.extend(props_log)
 
-    # 4 — Determine the port from BlueMap config
-    if bluemap_port is None:
-        bluemap_port = _read_bluemap_port(server_dir)
-
-    if bluemap_port:
-        # The URL players connect to — this needs to be accessible from outside
-        # For now, use localhost; the user will need to set up a tunnel
-        log.append(("info",
-                     f"  BlueMap web server on port {bluemap_port}"))
-        log.append(("info",
-                     "  Set resource-pack URL to your public BlueMap address + /fruitbowl-pack.zip"))
-    else:
-        log.append(("warn", "⚠ Could not determine BlueMap port"))
+    log.append(("info", ""))
+    log.append(("info", "  Restart the server for changes to take effect."))
 
     return log
-
-
-def deploy_to_mcpacks(
-    pack_root: str,
-    server_dir: str,
-) -> list[tuple[str, str]]:
-    """
-    Zip the pack, compute SHA1, and prepare for mc-packs.net upload.
-    Returns a list of (tag, message) log tuples.
-    """
-    log = []
-
-    # 1 — Zip
-    zip_path = zip_pack(pack_root)
-    zip_size = os.path.getsize(zip_path)
-    log.append(("success", f"✓ Packed → {os.path.basename(zip_path)} ({zip_size // 1024}KB)"))
-
-    # 2 — SHA1
-    sha1 = compute_sha1(zip_path)
-    log.append(("success", f"✓ SHA1: {sha1}"))
-
-    # 3 — Expected URL after upload
-    expected_url = f"https://download.mc-packs.net/pack/{sha1}.zip"
-    log.append(("info", f"  Expected URL: {expected_url}"))
-    log.append(("info", f"  Zip location: {zip_path}"))
-    log.append(("info", ""))
-    log.append(("info", "  Upload the zip to https://mc-packs.net/"))
-    log.append(("info", "  Then click 'Update server.properties' to apply."))
-
-    return log, zip_path, sha1
-
-
-def _read_bluemap_port(server_dir: str) -> int | None:
-    """Read port from BlueMap webserver.conf."""
-    conf_path = os.path.join(server_dir, "config", "bluemap", "webserver.conf")
-    if not os.path.exists(conf_path):
-        return None
-    try:
-        with open(conf_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("port:"):
-                    return int(line.split(":")[1].strip())
-    except Exception:
-        pass
-    return None

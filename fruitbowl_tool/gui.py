@@ -14,7 +14,7 @@ from .core import (
     add_to_pack,
 )
 from .manage import scan_all_models, delete_model
-from .deploy import zip_pack, compute_sha1, update_server_properties, deploy_to_mcpacks
+from .deploy import zip_pack, compute_sha1, update_server_properties, upload_to_github, deploy_full, get_pack_url
 
 
 class FruitbowlApp:
@@ -971,7 +971,7 @@ class FruitbowlApp:
             size = os.path.getsize(zip_path)
 
             self.deploy_sha1_var.set(sha1)
-            self.deploy_url_var.set(f"https://download.mc-packs.net/pack/{sha1}.zip")
+            self.deploy_url_var.set(get_pack_url())
             self.deploy_size_var.set(f"{size / 1024:.0f} KB")
 
             self._log_to(self.deploy_log, f"✓ Zip created: {zip_path}", "success")
@@ -979,7 +979,7 @@ class FruitbowlApp:
             self._log_to(self.deploy_log, f"✓ Size: {size // 1024} KB", "success")
             self._log_to(self.deploy_log, "", "info")
             self._log_to(self.deploy_log,
-                         "Upload to https://mc-packs.net/ then click 'Deploy to Server'.",
+                         "Click 'Deploy to Server' to upload and apply.",
                          "info")
 
             # Store for later use
@@ -1010,33 +1010,18 @@ class FruitbowlApp:
         self._log_to(self.deploy_log, "Deploying to server…", "header")
 
         try:
-            # Zip and hash
-            zip_path = zip_pack(pack)
-            sha1 = compute_sha1(zip_path)
-            size = os.path.getsize(zip_path)
-
-            self.deploy_sha1_var.set(sha1)
-            url = f"https://download.mc-packs.net/pack/{sha1}.zip"
-            self.deploy_url_var.set(url)
-            self.deploy_size_var.set(f"{size / 1024:.0f} KB")
-
-            self._log_to(self.deploy_log,
-                         f"✓ Packed ({size // 1024} KB), SHA1: {sha1}", "success")
-
-            # Update server.properties
-            msgs = update_server_properties(server_dir, url, sha1)
+            msgs = deploy_full(pack, server_dir)
             for tag, msg in msgs:
                 self._log_to(self.deploy_log, msg, tag)
 
-            self._log_to(self.deploy_log, "", "info")
-            self._log_to(self.deploy_log,
-                         "⚠ Remember to upload the zip to mc-packs.net!", "warn")
-            self._log_to(self.deploy_log, f"  Zip: {zip_path}", "info")
-            self._log_to(self.deploy_log,
-                         "  Restart the server for changes to take effect.", "info")
-
-            self._deploy_zip_path = zip_path
-            self._deploy_sha1 = sha1
+            # Update info labels
+            zip_path = os.path.join(os.path.dirname(pack), "fruitbowl-server-pack.zip")
+            if os.path.exists(zip_path):
+                sha1 = compute_sha1(zip_path)
+                size = os.path.getsize(zip_path)
+                self.deploy_sha1_var.set(sha1)
+                self.deploy_url_var.set(get_pack_url())
+                self.deploy_size_var.set(f"{size / 1024:.0f} KB")
 
         except Exception as e:
             self._log_to(self.deploy_log, f"ERROR: {e}", "error")

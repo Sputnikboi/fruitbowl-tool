@@ -8,6 +8,7 @@ def main_cli():
     import argparse
     from fruitbowl_tool.deploy import (
         zip_pack, compute_sha1, update_server_properties,
+        upload_to_github, get_pack_url, deploy_full,
     )
 
     parser = argparse.ArgumentParser(
@@ -15,7 +16,7 @@ def main_cli():
     sub = parser.add_subparsers(dest="command")
 
     # deploy sub-command
-    deploy_p = sub.add_parser("deploy", help="Zip pack and update server.properties")
+    deploy_p = sub.add_parser("deploy", help="Zip, upload to GitHub, update server.properties")
     deploy_p.add_argument("pack", help="Path to resource pack directory")
     deploy_p.add_argument("--server", "-s", required=True,
                           help="Path to Minecraft server directory")
@@ -36,28 +37,12 @@ def main_cli():
         size = os.path.getsize(zip_path)
         print(f"✓ Zip: {zip_path} ({size // 1024} KB)")
         print(f"✓ SHA1: {sha1}")
-        print(f"✓ mc-packs URL: https://download.mc-packs.net/pack/{sha1}.zip")
+        print(f"✓ URL: {get_pack_url()}")
 
     elif args.command == "deploy":
-        # Zip
-        zip_path = zip_pack(args.pack)
-        sha1 = compute_sha1(zip_path)
-        import os
-        size = os.path.getsize(zip_path)
-        url = f"https://download.mc-packs.net/pack/{sha1}.zip"
-
-        print(f"✓ Zip: {zip_path} ({size // 1024} KB)")
-        print(f"✓ SHA1: {sha1}")
-        print(f"✓ URL: {url}")
-
-        # Update server.properties
-        msgs = update_server_properties(args.server, url, sha1)
+        msgs = deploy_full(args.pack, args.server)
         for tag, msg in msgs:
             print(f"  {msg}")
-
-        print()
-        print(f"⚠  Upload the zip to https://mc-packs.net/ !")
-        print(f"   Zip: {zip_path}")
 
         # Restart if requested
         if args.restart:
