@@ -120,3 +120,7 @@ assets/
 └── minecraft/
     └── items/stone_button.json          ← threshold entry appended here
 ```
+
+## Known Issues
+
+- **Trident throwing orientation**: Custom trident models may not display correctly when thrown in 3rd person. The tool generates a `_throwing` variant with flipped display settings, but this doesn't fully match how vanilla tridents handle the throwing pose (which uses retransformed geometry). Workaround: manually create a separate throwing model in Blockbench with the correct orientation.
