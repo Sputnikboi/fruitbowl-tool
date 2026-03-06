@@ -202,7 +202,7 @@ def update_minecraft_item(mc_item_path: str, model_name: str, mc_item_id: str) -
 
     # Items that need special dispatch entries
     if mc_item_id == "trident":
-        # Trident needs using_item condition so throwing orientation works
+        # Trident needs using_item condition with separate throwing model
         new_entry = {
             "threshold": next_threshold,
             "model": {
@@ -210,7 +210,7 @@ def update_minecraft_item(mc_item_path: str, model_name: str, mc_item_id: str) -
                 "property": "minecraft:using_item",
                 "on_true": {
                     "type": "minecraft:model",
-                    "model": f"fruitbowl:item/{model_name}",
+                    "model": f"fruitbowl:item/{model_name}_throwing",
                 },
                 "on_false": {
                     "type": "minecraft:model",
@@ -443,6 +443,41 @@ def add_to_pack(bbmodel_path: str, pack_root: str, mc_item_id: str,
         json.dump(model_json, f, indent=2)
         f.write("\n")
     log.append(("success", f"✓ Model  → models/item/{model_name}.json"))
+
+    # 2b — Throwing variant for tridents
+    if mc_item_id == "trident":
+        import copy
+        throwing_json = copy.deepcopy(model_json)
+        display = throwing_json.setdefault("display", {})
+        # Flip 3rd person views for throwing orientation
+        display["thirdperson_righthand"] = {
+            "rotation": [0, 0, -180],
+            "translation": display.get("thirdperson_righthand", {}).get(
+                "translation", [0, 0, 0]).copy(),
+        }
+        # Flip Y translation for throwing
+        tr = display["thirdperson_righthand"]["translation"]
+        tr[1] = -tr[1] - 1
+        display["thirdperson_lefthand"] = {
+            "rotation": [0, 0, -180],
+            "translation": tr.copy(),
+        }
+        display["firstperson_righthand"] = {
+            "rotation": [-36, 0, 0],
+            "translation": [8.5, -8.5, 4.5],
+        }
+        display["firstperson_lefthand"] = {
+            "rotation": [-36, 0, 0],
+            "translation": [8.5, -8.5, 4.5],
+        }
+        # Remove gui from throwing variant
+        display.pop("gui", None)
+
+        throwing_path = os.path.join(pack_root, MODEL_DIR, f"{model_name}_throwing.json")
+        with open(throwing_path, "w", encoding="utf-8") as f:
+            json.dump(throwing_json, f, indent=2)
+            f.write("\n")
+        log.append(("success", f"✓ Model  → models/item/{model_name}_throwing.json"))
 
     # 3 — Fruitbowl item JSON
     fb_item = build_fruitbowl_item_json(model_name)
