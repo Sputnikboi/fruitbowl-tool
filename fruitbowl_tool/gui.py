@@ -887,6 +887,18 @@ class FruitbowlApp:
         row = 0
 
         # -- Server directory --
+        # -- Resource Pack directory --
+        ttk.Label(deploy, text="Resource Pack Directory:").grid(
+            row=row, column=0, sticky="w", **pad)
+        self.deploy_pack_var = tk.StringVar(
+            value=self.settings.get("pack_path", ""))
+        entry_pack = ttk.Entry(deploy, textvariable=self.deploy_pack_var, width=52)
+        entry_pack.grid(row=row, column=1, sticky="ew", **pad)
+        ttk.Button(deploy, text="Browse\u2026",
+                   command=self._deploy_browse_pack).grid(
+            row=row, column=2, **pad)
+        row += 1
+
         ttk.Label(deploy, text="Minecraft Server Directory:").grid(
             row=row, column=0, sticky="w", **pad)
         self.deploy_server_var = tk.StringVar(
@@ -956,8 +968,15 @@ class FruitbowlApp:
             self.settings["server_dir"] = d
             save_settings(self.settings)
 
+    def _deploy_browse_pack(self):
+        d = filedialog.askdirectory(title="Select Resource Pack Directory")
+        if d:
+            self.deploy_pack_var.set(d)
+            self.settings["pack_path"] = d
+            save_settings(self.settings)
+
     def _deploy_zip(self):
-        pack = self.settings.get("pack_path", "")
+        pack = self.deploy_pack_var.get() or self.settings.get("pack_path", "")
         if not pack or not os.path.isdir(pack):
             messagebox.showerror("Error", "Set a valid pack path first (Single Model tab).")
             return
@@ -990,7 +1009,7 @@ class FruitbowlApp:
             self._log_to(self.deploy_log, f"ERROR: {e}", "error")
 
     def _deploy_full(self):
-        pack = self.settings.get("pack_path", "")
+        pack = self.deploy_pack_var.get() or self.settings.get("pack_path", "")
         server_dir = self.deploy_server_var.get()
 
         if not pack or not os.path.isdir(pack):
