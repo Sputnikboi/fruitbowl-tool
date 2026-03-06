@@ -4,7 +4,7 @@ import sys
 
 
 def main_cli():
-    """CLI entry point for deploy commands."""
+    """CLI entry point for deploy and scan commands."""
     import argparse
     from fruitbowl_tool.deploy import (
         zip_pack, compute_sha1, update_server_properties,
@@ -28,6 +28,12 @@ def main_cli():
     zip_p.add_argument("pack", help="Path to resource pack directory")
     zip_p.add_argument("--output", "-o", help="Output zip path")
 
+    # scan sub-command
+    scan_p = sub.add_parser("scan", help="Scan pack models for z-fighting")
+    scan_p.add_argument("pack", help="Path to resource pack directory")
+    scan_p.add_argument("--min-overlap", "-m", type=float, default=0.5,
+                        help="Minimum overlap area to report (default: 0.5)")
+
     args = parser.parse_args()
 
     if args.command == "zip":
@@ -44,7 +50,6 @@ def main_cli():
         for tag, msg in msgs:
             print(f"  {msg}")
 
-        # Restart if requested
         if args.restart:
             import subprocess
             print()
@@ -57,12 +62,22 @@ def main_cli():
             else:
                 print(f"⚠ Restart failed: {result.stderr.strip()}")
 
+    elif args.command == "scan":
+        from fruitbowl_tool.zfight import scan_pack, format_report
+        results = scan_pack(args.pack)
+        filtered = {}
+        for model, hits in results.items():
+            big_hits = [h for h in hits if h.overlap_area >= args.min_overlap]
+            if big_hits:
+                filtered[model] = big_hits
+        print(format_report(filtered))
+
     else:
         parser.print_help()
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] in ("deploy", "zip"):
+    if len(sys.argv) > 1 and sys.argv[1] in ("deploy", "zip", "scan"):
         main_cli()
     else:
         from fruitbowl_tool.gui import main

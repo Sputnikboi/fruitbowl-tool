@@ -16,6 +16,7 @@ from .core import (
 )
 from .manage import scan_all_models, delete_model
 from .deploy import zip_pack, compute_sha1, update_server_properties, upload_to_github, deploy_full, get_pack_url
+from .zfight import scan_pack as zfight_scan_pack, format_report as zfight_format_report
 
 
 class FruitbowlApp:
@@ -286,6 +287,8 @@ class FruitbowlApp:
                    command=self._manage_delete).pack(pady=(16, 2))
         ttk.Button(btn_col, text="Update…", width=12,
                    command=self._manage_update).pack(pady=2)
+        ttk.Button(btn_col, text="Z-Fight Scan", width=12,
+                   command=self._manage_zfight_scan).pack(pady=(16, 2))
 
         # ── Output log ───────────────────────────────────────────────────
         row += 1
@@ -880,6 +883,51 @@ class FruitbowlApp:
         # Auto-rescan
         self.manage_models = scan_all_models(pack)
         self._manage_populate_tree()
+
+    def _manage_zfight_scan(self):
+        """Scan all models in the pack for z-fighting."""
+        pack = self.pack_path.get().strip()
+        if not pack or not os.path.isdir(pack):
+            messagebox.showerror("Error", "Set a valid pack path first.")
+            return
+
+        self._log_clear(self.manage_log)
+        self._log_to(self.manage_log, "Scanning for z-fighting…", "header")
+
+        results = zfight_scan_pack(pack)
+
+        if not results:
+            self._log_to(self.manage_log, "✓ No z-fighting detected!", "success")
+            return
+
+        # Filter to significant overlaps
+        filtered = {}
+        for model, hits in results.items():
+            big_hits = [h for h in hits if h.overlap_area >= 2.0]
+            if big_hits:
+                filtered[model] = big_hits
+
+        if not filtered:
+            self._log_to(self.manage_log,
+                         f"✓ {len(results)} models have minor overlaps (< 2.0 area) — likely OK.",
+                         "success")
+            return
+
+        self._log_to(self.manage_log,
+                     f"⚠ {len(filtered)} model(s) with significant z-fighting:", "warn")
+        self._log_to(self.manage_log, "", "info")
+
+        for model_name, hits in filtered.items():
+            self._log_to(self.manage_log,
+                         f"  {model_name} — {len(hits)} overlap(s)", "warn")
+            for hit in hits[:5]:
+                self._log_to(self.manage_log,
+                             f"    {hit.elem1_name}/{hit.face1} ↔ "
+                             f"{hit.elem2_name}/{hit.face2} "
+                             f"(overlap {hit.overlap_area:.1f})", "info")
+            if len(hits) > 5:
+                self._log_to(self.manage_log,
+                             f"    … and {len(hits) - 5} more", "info")
 
 
 
