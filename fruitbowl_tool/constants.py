@@ -42,6 +42,7 @@ KNOWN_ITEMS = [
     "milk_bucket",
     "snowball",
     "salmon",
+    "leather",
 ]
 
 # ── Map from MC item IDs to model list.txt heading names ─────────────────────
@@ -73,6 +74,7 @@ ITEM_TO_HEADING = {
     "milk_bucket":      "Milk Bucket",
     "snowball":         "Snowball",
     "salmon":           "Salmon",
+    "leather":          "Leather",
 }
 
 # ── Block-type items: fallback model is a block model, not item model ────────
