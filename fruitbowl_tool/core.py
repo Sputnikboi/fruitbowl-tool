@@ -523,6 +523,45 @@ def needs_heading_name(pack_root: str, mc_item_id: str) -> bool:
     return not heading_exists_in_list(pack_root, fallback)
 
 
+def sync_helmets(pack_root: str) -> list[tuple[str, str]]:
+    """Copy stone_button dispatch entries to all helmet types.
+
+    The fruitbowl hat system uses the same CMD IDs on helmets as stone_button.
+    This ensures all helmet dispatch files stay in sync with stone_button.
+    """
+    import copy
+    log: list[tuple[str, str]] = []
+    items_dir = os.path.join(pack_root, MC_ITEMS_DIR)
+    sb_path = os.path.join(items_dir, "stone_button.json")
+
+    if not os.path.exists(sb_path):
+        log.append(("error", "stone_button.json not found"))
+        return log
+
+    with open(sb_path) as f:
+        sb = json.load(f)
+
+    helmet_types = [
+        "leather_helmet", "chainmail_helmet", "iron_helmet",
+        "golden_helmet", "diamond_helmet", "netherite_helmet", "turtle_helmet"
+    ]
+
+    num_entries = len(sb.get("model", {}).get("entries", []))
+
+    for helmet in helmet_types:
+        dispatch = copy.deepcopy(sb)
+        dispatch["model"]["fallback"] = {
+            "type": "minecraft:model",
+            "model": f"minecraft:item/{helmet}"
+        }
+        out_path = os.path.join(items_dir, f"{helmet}.json")
+        with open(out_path, "w") as f:
+            json.dump(dispatch, f, indent=2)
+        log.append(("success", f"✓ {helmet}.json — {num_entries} entries synced"))
+
+    return log
+
+
 def scan_pack_items(pack_root: str) -> list[str]:
     """Scan the pack's minecraft/items dir to find available item types."""
     items_dir = os.path.join(pack_root, MC_ITEMS_DIR)

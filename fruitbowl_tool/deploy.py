@@ -180,7 +180,15 @@ def deploy_full(
     Full deploy: zip -> upload to GitHub -> update server.properties.
     Returns a list of (tag, message) log tuples.
     """
+    from fruitbowl_tool.core import sync_helmets
+
     log = []
+
+    # 0 - Sync helmet dispatches from stone_button
+    helmet_log = sync_helmets(pack_root)
+    if helmet_log:
+        log.append(("info", "Syncing helmet dispatches..."))
+        log.extend(helmet_log)
 
     # 1 - Zip
     zip_path = zip_pack(pack_root)
