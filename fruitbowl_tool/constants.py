@@ -16,6 +16,7 @@ MODEL_LIST   = "model list.txt"
 # ── Known item types for the dropdown ────────────────────────────────────────
 KNOWN_ITEMS = [
     "stone_button",
+    "pale_oak_button",
     "diamond_sword",
     "netherite_sword",
     "wooden_sword",
@@ -48,6 +49,7 @@ KNOWN_ITEMS = [
 # ── Map from MC item IDs to model list.txt heading names ─────────────────────
 ITEM_TO_HEADING = {
     "stone_button":     "Stone Button",
+    "pale_oak_button": "Pale Oak Button",
     "diamond_sword":    "Diamond/Netherite Sword",
     "netherite_sword":  "Diamond/Netherite Sword",
     "wooden_sword":     "Wooden Sword",
@@ -83,6 +85,7 @@ ITEM_TO_HEADING = {
 # the default minecraft:item/<id> which doesn't exist for block items.
 BLOCK_ITEM_FALLBACKS = {
     "stone_button":     "minecraft:block/stone_button_inventory",
+    "pale_oak_button": "minecraft:block/pale_oak_button_inventory",
     "white_wool":       "minecraft:block/white_wool",
     "carved_pumpkin":   "minecraft:block/carved_pumpkin",
 }
