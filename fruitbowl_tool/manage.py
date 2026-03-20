@@ -12,6 +12,7 @@ from .constants import (
     TEXTURE_DIR, MODEL_DIR, FB_ITEMS_DIR, MC_ITEMS_DIR,
     MODEL_LIST, ITEM_TO_HEADING,
 )
+from .core import sync_helmets
 
 
 def _parse_model_list(pack_root: str) -> dict[str, dict[str, str]]:
@@ -315,6 +316,10 @@ def delete_model(pack_root: str, mc_item_id: str, model_name: str,
             log.append(("success", f"✓ Deleted item def: {model_name}.json"))
         else:
             log.append(("warn", f"⚠ Item def not found: {model_name}.json"))
+
+    # Auto-sync helmets if we modified stone_button
+    if mc_item_id == "stone_button":
+        log.extend(sync_helmets(pack_root))
 
     return log
 

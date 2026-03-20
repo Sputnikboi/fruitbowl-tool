@@ -577,6 +577,10 @@ def add_to_pack(bbmodel_path: str, pack_root: str, mc_item_id: str,
     # 5 — Model list
     log.append(update_model_list(pack_root, mc_item_id, model_name, threshold, author, heading_override))
 
+    # 6 — Auto-sync helmets if we modified stone_button
+    if mc_item_id == "stone_button":
+        log.extend(sync_helmets(pack_root))
+
     log.append(("info", f"  → /trigger CustomModelData set {threshold}"))
 
     return log
