@@ -371,8 +371,6 @@ class FruitbowlApp:
             return
         filtered = [item for item in self.available_items if typed in item]
         combo["values"] = filtered
-        if filtered:
-            combo.event_generate("<Down>")
 
     def _ask_heading_name(self, item_id: str) -> str | None:
         saved = self.settings.get("custom_headings", {}).get(item_id)
