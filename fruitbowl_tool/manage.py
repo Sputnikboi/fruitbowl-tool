@@ -154,45 +154,61 @@ def scan_all_models(pack_root: str) -> list[dict]:
     return models
 
 
+def _count_dispatch_references(pack_root: str, model_name: str,
+                               exclude_item_id: str = "") -> int:
+    """Count how many dispatch files reference this model, optionally excluding one."""
+    mc_items_dir = os.path.join(pack_root, MC_ITEMS_DIR)
+    if not os.path.isdir(mc_items_dir):
+        return 0
+
+    model_ref = f"fruitbowl:item/{model_name}"
+    count = 0
+
+    for filename in os.listdir(mc_items_dir):
+        if not filename.endswith(".json"):
+            continue
+        item_id = os.path.splitext(filename)[0]
+        if item_id == exclude_item_id:
+            continue
+
+        filepath = os.path.join(mc_items_dir, filename)
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        entries = data.get("model", {}).get("entries", [])
+        for e in entries:
+            m = e.get("model", {})
+            # Check direct model ref
+            if m.get("model") == model_ref:
+                count += 1
+                break
+            # Check inside condition wrappers (trident/bow)
+            for key in ("on_true", "on_false"):
+                if m.get(key, {}).get("model") == model_ref:
+                    count += 1
+                    break
+
+    return count
+
+
 def delete_model(pack_root: str, mc_item_id: str, model_name: str,
                  threshold: int) -> list[tuple[str, str]]:
     """
     Delete a model from the pack. Removes up to 5 artifacts:
-    1. Texture PNG
-    2. Model JSON
-    3. Fruitbowl item def JSON
-    4. Entry from minecraft item dispatch JSON
-    5. Entry from model list.txt
+    1. Entry from minecraft item dispatch JSON
+    2. Entry from model list.txt
+    3. Texture PNG (only if no other dispatch files reference this model)
+    4. Model JSON (only if no other dispatch files reference this model)
+    5. Fruitbowl item def JSON (only if no other dispatch files reference this model)
 
     Returns a list of (tag, message) log tuples.
     """
     log = []
 
-    # 1 — Texture
-    tex_path = os.path.join(pack_root, TEXTURE_DIR, f"{model_name}.png")
-    if os.path.exists(tex_path):
-        os.remove(tex_path)
-        log.append(("success", f"✓ Deleted texture: {model_name}.png"))
-    else:
-        log.append(("warn", f"⚠ Texture not found: {model_name}.png"))
-
-    # 2 — Model JSON
-    model_path = os.path.join(pack_root, MODEL_DIR, f"{model_name}.json")
-    if os.path.exists(model_path):
-        os.remove(model_path)
-        log.append(("success", f"✓ Deleted model: {model_name}.json"))
-    else:
-        log.append(("warn", f"⚠ Model file not found: {model_name}.json"))
-
-    # 3 — Fruitbowl item def
-    item_path = os.path.join(pack_root, FB_ITEMS_DIR, f"{model_name}.json")
-    if os.path.exists(item_path):
-        os.remove(item_path)
-        log.append(("success", f"✓ Deleted item def: {model_name}.json"))
-    else:
-        log.append(("warn", f"⚠ Item def not found: {model_name}.json"))
-
-    # 4 — Remove from dispatch JSON
+    # 1 — Remove from dispatch JSON (do this first)
     mc_item_path = os.path.join(pack_root, MC_ITEMS_DIR, f"{mc_item_id}.json")
     if os.path.exists(mc_item_path):
         try:
@@ -204,6 +220,10 @@ def delete_model(pack_root: str, mc_item_id: str, model_name: str,
             data["model"]["entries"] = [
                 e for e in entries
                 if e.get("model", {}).get("model") != model_ref
+                and not any(
+                    e.get("model", {}).get(k, {}).get("model") == model_ref
+                    for k in ("on_true", "on_false")
+                )
             ]
             removed = original_count - len(data["model"]["entries"])
             if removed:
@@ -218,8 +238,52 @@ def delete_model(pack_root: str, mc_item_id: str, model_name: str,
     else:
         log.append(("warn", f"⚠ Dispatch file not found: {mc_item_id}.json"))
 
-    # 5 — Remove from model list.txt
+    # 2 — Remove from model list.txt
     log.extend(_remove_from_model_list(pack_root, mc_item_id, threshold))
+
+    # 3-5 — Only delete shared files if no other dispatch files still reference this model
+    other_refs = _count_dispatch_references(pack_root, model_name)
+
+    if other_refs > 0:
+        log.append(("info", f"ℹ Keeping files — model still used by {other_refs} other item(s)"))
+    else:
+        # Texture
+        tex_path = os.path.join(pack_root, TEXTURE_DIR, f"{model_name}.png")
+        if os.path.exists(tex_path):
+            os.remove(tex_path)
+            log.append(("success", f"✓ Deleted texture: {model_name}.png"))
+        else:
+            log.append(("warn", f"⚠ Texture not found: {model_name}.png"))
+
+        # Also delete secondary textures (multi-texture models: model_name_1.png etc.)
+        tex_dir = os.path.join(pack_root, TEXTURE_DIR)
+        if os.path.isdir(tex_dir):
+            for f in os.listdir(tex_dir):
+                if f.startswith(f"{model_name}_") and f.endswith(".png"):
+                    os.remove(os.path.join(tex_dir, f))
+                    log.append(("success", f"✓ Deleted texture: {f}"))
+
+        # Model JSON
+        model_path = os.path.join(pack_root, MODEL_DIR, f"{model_name}.json")
+        if os.path.exists(model_path):
+            os.remove(model_path)
+            log.append(("success", f"✓ Deleted model: {model_name}.json"))
+        else:
+            log.append(("warn", f"⚠ Model file not found: {model_name}.json"))
+
+        # Also delete throwing variant if present
+        throwing_path = os.path.join(pack_root, MODEL_DIR, f"{model_name}_throwing.json")
+        if os.path.exists(throwing_path):
+            os.remove(throwing_path)
+            log.append(("success", f"✓ Deleted model: {model_name}_throwing.json"))
+
+        # Fruitbowl item def
+        item_path = os.path.join(pack_root, FB_ITEMS_DIR, f"{model_name}.json")
+        if os.path.exists(item_path):
+            os.remove(item_path)
+            log.append(("success", f"✓ Deleted item def: {model_name}.json"))
+        else:
+            log.append(("warn", f"⚠ Item def not found: {model_name}.json"))
 
     return log
 
