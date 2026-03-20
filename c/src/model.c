@@ -1,4 +1,5 @@
 #include "model.h"
+#include "pack.h"  // for FB_MODEL_DIR, FB_TEXTURE_DIR
 #include "util.h"
 #include "cJSON.h"
 #include <stdio.h>
@@ -290,4 +291,167 @@ void fb_unload_model_textures(FBModel *model) {
             UnloadTexture(model->textures[i]);
     }
     model->textures_loaded = false;
+}
+
+// ── Load model from pack (MC JSON format + PNG textures on disk) ────────────
+
+bool fb_load_pack_model(const char *pack_root, const char *model_name, FBModel *out) {
+    memset(out, 0, sizeof(FBModel));
+    strncpy(out->name, model_name, FB_MAX_NAME - 1);
+
+    // Load model JSON
+    char model_path[FB_MAX_PATH];
+    snprintf(model_path, sizeof(model_path), "%s/%s/%s.json",
+             pack_root, FB_MODEL_DIR, model_name);
+
+    int file_len;
+    char *json_str = fb_read_file(model_path, &file_len);
+    if (!json_str) return false;
+
+    cJSON *root = cJSON_Parse(json_str);
+    free(json_str);
+    if (!root) return false;
+
+    // texture_size
+    cJSON *ts = cJSON_GetObjectItem(root, "texture_size");
+    if (ts && cJSON_GetArraySize(ts) == 2) {
+        out->texture_size[0] = cJSON_GetArrayItem(ts, 0)->valueint;
+        out->texture_size[1] = cJSON_GetArrayItem(ts, 1)->valueint;
+    } else {
+        out->texture_size[0] = 16;
+        out->texture_size[1] = 16;
+    }
+
+    // Parse textures map: {"0": "fruitbowl:item/name", "1": "...", "particle": "..."}
+    // We need to: (a) count real texture indices, (b) resolve paths to load PNGs
+    cJSON *textures = cJSON_GetObjectItem(root, "textures");
+    // Texture paths indexed by number (max FB_MAX_TEXTURES)
+    char tex_paths[FB_MAX_TEXTURES][FB_MAX_PATH];
+    memset(tex_paths, 0, sizeof(tex_paths));
+    int max_tex_idx = -1;
+
+    if (textures) {
+        cJSON *tex_entry;
+        cJSON_ArrayForEach(tex_entry, textures) {
+            const char *key = tex_entry->string;
+            if (!key || !cJSON_IsString(tex_entry)) continue;
+            // Skip "particle" key — it's not a numbered texture
+            // But do process numeric keys: "0", "1", etc.
+            char *endp;
+            long idx = strtol(key, &endp, 10);
+            if (*endp != '\0' || idx < 0 || idx >= FB_MAX_TEXTURES) continue;
+
+            // Value is like "fruitbowl:item/ham" → texture file at textures/item/ham.png
+            const char *val = tex_entry->valuestring;
+            const char *colon = strchr(val, ':');
+            const char *rel_path = colon ? colon + 1 : val;
+            // The namespace before colon tells us assets/<namespace>/textures/<rel_path>.png
+            char ns[64] = "minecraft";
+            if (colon) {
+                int ns_len = (int)(colon - val);
+                if (ns_len > 0 && ns_len < (int)sizeof(ns)) {
+                    strncpy(ns, val, ns_len);
+                    ns[ns_len] = '\0';
+                }
+            }
+            snprintf(tex_paths[idx], FB_MAX_PATH, "%s/assets/%s/textures/%s.png",
+                     pack_root, ns, rel_path);
+
+            if ((int)idx > max_tex_idx) max_tex_idx = (int)idx;
+        }
+    }
+    out->texture_count = max_tex_idx + 1;
+
+    // Load texture PNGs from disk
+    for (int i = 0; i < out->texture_count; i++) {
+        if (tex_paths[i][0] && fb_file_exists(tex_paths[i])) {
+            Image img = LoadImage(tex_paths[i]);
+            if (img.data) {
+                out->textures[i] = LoadTextureFromImage(img);
+                UnloadImage(img);
+            }
+        }
+    }
+    out->textures_loaded = true;
+
+    // Parse elements — MC JSON format (UVs already in 0-16 range)
+    cJSON *elements = cJSON_GetObjectItem(root, "elements");
+    if (!elements) { cJSON_Delete(root); return true; } // valid model with no elements
+
+    cJSON *el;
+    int ei = 0;
+    cJSON_ArrayForEach(el, elements) {
+        if (ei >= FB_MAX_ELEMENTS) break;
+        FBElement *elem = &out->elements[ei];
+        elem->shade = true;
+
+        // from / to
+        cJSON *from = cJSON_GetObjectItem(el, "from");
+        cJSON *to   = cJSON_GetObjectItem(el, "to");
+        if (!from || !to) continue;
+        for (int i = 0; i < 3; i++) {
+            elem->from[i] = (float)cJSON_GetArrayItem(from, i)->valuedouble;
+            elem->to[i]   = (float)cJSON_GetArrayItem(to, i)->valuedouble;
+        }
+
+        // Rotation — MC format: {"angle": 22.5, "axis": "x", "origin": [8,8,8]}
+        cJSON *rot = cJSON_GetObjectItem(el, "rotation");
+        if (rot && cJSON_IsObject(rot)) {
+            cJSON *angle  = cJSON_GetObjectItem(rot, "angle");
+            cJSON *axis   = cJSON_GetObjectItem(rot, "axis");
+            cJSON *origin = cJSON_GetObjectItem(rot, "origin");
+            if (angle && axis && origin) {
+                elem->rot_angle = (float)angle->valuedouble;
+                const char *axis_str = axis->valuestring;
+                if (axis_str) elem->rot_axis = axis_str[0];
+                for (int i = 0; i < 3; i++)
+                    elem->rot_origin[i] = (float)cJSON_GetArrayItem(origin, i)->valuedouble;
+            }
+        }
+
+        // Faces — MC format: texture is "#0" string, UVs already 0-16
+        cJSON *faces = cJSON_GetObjectItem(el, "faces");
+        if (faces) {
+            cJSON *face;
+            cJSON_ArrayForEach(face, faces) {
+                int fi = face_index(face->string);
+                if (fi < 0) continue;
+                FBFace *f = &elem->faces[fi];
+
+                cJSON *uv = cJSON_GetObjectItem(face, "uv");
+                if (uv && cJSON_GetArraySize(uv) == 4) {
+                    // UVs are already in 0-16 range in pack model JSON
+                    f->uv[0] = (float)cJSON_GetArrayItem(uv, 0)->valuedouble;
+                    f->uv[1] = (float)cJSON_GetArrayItem(uv, 1)->valuedouble;
+                    f->uv[2] = (float)cJSON_GetArrayItem(uv, 2)->valuedouble;
+                    f->uv[3] = (float)cJSON_GetArrayItem(uv, 3)->valuedouble;
+                }
+
+                cJSON *tex = cJSON_GetObjectItem(face, "texture");
+                if (tex && cJSON_IsString(tex)) {
+                    // Format: "#0", "#1" etc — extract numeric index
+                    const char *ts = tex->valuestring;
+                    if (ts && ts[0] == '#') {
+                        f->texture_idx = atoi(ts + 1);
+                        f->has_texture = true;
+                    }
+                }
+
+                cJSON *frot = cJSON_GetObjectItem(face, "rotation");
+                if (frot && cJSON_IsNumber(frot))
+                    f->rotation = frot->valueint;
+            }
+        }
+
+        // Shade
+        cJSON *shade = cJSON_GetObjectItem(el, "shade");
+        if (shade && cJSON_IsFalse(shade))
+            elem->shade = false;
+
+        ei++;
+    }
+    out->element_count = ei;
+
+    cJSON_Delete(root);
+    return true;
 }

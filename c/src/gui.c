@@ -122,7 +122,7 @@ static void draw_log(FBLog *log, int x, int y, int w, int h) {
             case FB_LOG_HEADER: c = RAYWHITE; break;
             default: c = C_BLUE; break;
         }
-        DrawText(e->text, x + 4, y + 2 + (i - start) * line_h, 11, c);
+        DrawText(e->text, x + 4, y + 2 + (i - start) * line_h, FONT_LABEL, c);
     }
 }
 
@@ -157,7 +157,7 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     }
     cy += FIELD_H + PAD;
 
-    DrawText("BBModel File (drag & drop or browse)", x + PAD, cy, 11, C_DIM); cy += FONT_LABEL + 3;
+    DrawText("BBModel File (drag & drop or browse)", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
     Rectangle bb_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD-browse_w-PAD), FIELD_H};
     if (GuiTextBox(bb_r, s->bbmodel_path, FB_MAX_PATH, import_editing[1])) import_editing[1] = !import_editing[1];
     Rectangle bb_btn = {(float)(x+w-PAD-browse_w), (float)cy, (float)browse_w, FIELD_H};
@@ -177,12 +177,12 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     }
     cy += FIELD_H + PAD;
 
-    DrawText("Model Name (blank = from filename)", x + PAD, cy, 11, C_DIM); cy += FONT_LABEL + 3;
+    DrawText("Model Name (blank = from filename)", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
     Rectangle name_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), FIELD_H};
     if (GuiTextBox(name_r, s->model_name, FB_MAX_NAME, import_editing[2])) import_editing[2] = !import_editing[2];
     cy += FIELD_H + PAD;
 
-    DrawText("Author (optional)", x + PAD, cy, 11, C_DIM); cy += FONT_LABEL + 3;
+    DrawText("Author (optional)", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
     Rectangle auth_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), FIELD_H};
     if (GuiTextBox(auth_r, s->author, FB_MAX_NAME, import_editing[3])) import_editing[3] = !import_editing[3];
     cy += FIELD_H + PAD;
@@ -271,7 +271,7 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
     cy += FIELD_H + PAD;
 
     // Filter
-    DrawText("Search (type 'noauthor' to find missing)", x+PAD, cy, 11, C_DIM); cy += FONT_LABEL + 3;
+    DrawText("Search (type 'noauthor' to find missing)", x+PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
     Rectangle filt_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), FIELD_H};
     if (GuiTextBox(filt_r, s->manage_filter, FB_MAX_NAME, filter_editing)) filter_editing = !filter_editing;
     // Reset scroll when filter changes
@@ -389,19 +389,19 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
     }
 
     if (GuiButton((Rectangle){(float)(list_x + btn_w + PAD), by, (float)btn_w, BTN_H}, "Preview")) {
-        if (s->manage_selected >= 0) {
+        if (s->manage_selected >= 0 && s->pack_path[0]) {
             FBPackEntry *e = &s->pack_entries[s->manage_selected];
-            // Load model from pack for preview
-            char model_path[FB_MAX_PATH];
-            snprintf(model_path, sizeof(model_path), "%s/%s/%s.json",
-                     s->pack_path, FB_MODEL_DIR, e->model_name);
-            if (fb_file_exists(model_path)) {
-                if (s->preview_loaded) fb_unload_model_textures(&s->preview_model);
-                // For preview from pack, we'd need to load the JSON model + texture files
-                // For now, just log it
-                fb_log_clear(&s->log);
-                fb_log(&s->log, FB_LOG_INFO, "Preview: load the .bbmodel in the Preview tab");
+            if (s->preview_loaded) fb_unload_model_textures(&s->preview_model);
+            s->preview_loaded = false;
+            fb_log_clear(&s->log);
+            if (fb_load_pack_model(s->pack_path, e->model_name, &s->preview_model)) {
+                s->preview_loaded = true;
+                reset_camera_to_model(&s->camera, &s->preview_model);
+                fb_log(&s->log, FB_LOG_SUCCESS, "Loaded %s (%d elements, %d textures)",
+                       e->model_name, s->preview_model.element_count, s->preview_model.texture_count);
                 s->active_tab = TAB_PREVIEW;
+            } else {
+                fb_log(&s->log, FB_LOG_ERROR, "Failed to load model: %s", e->model_name);
             }
         }
     }
@@ -450,11 +450,11 @@ static void draw_preview_sidebar(FBAppState *s, int x, int y, int w, int h) {
     if (s->preview_loaded) {
         DrawLine(x, cy, x+w, cy, C_BORDER); cy += PAD;
         DrawText("Loaded Model:", x+PAD, cy, FONT_TITLE, C_GREEN); cy += 18;
-        DrawText(TextFormat("Name: %s", s->preview_model.name), x+PAD+4, cy, 11, C_TEXT); cy += FONT_LABEL + 3;
-        DrawText(TextFormat("Elements: %d", s->preview_model.element_count), x+PAD+4, cy, 11, C_TEXT); cy += FONT_LABEL + 3;
+        DrawText(TextFormat("Name: %s", s->preview_model.name), x+PAD+4, cy, FONT_LABEL, C_TEXT); cy += FONT_LABEL + 3;
+        DrawText(TextFormat("Elements: %d", s->preview_model.element_count), x+PAD+4, cy, FONT_LABEL, C_TEXT); cy += FONT_LABEL + 3;
         DrawText(TextFormat("Texture: %dx%d", s->preview_model.texture_size[0], s->preview_model.texture_size[1]),
-                 x+PAD+4, cy, 11, C_TEXT); cy += FONT_LABEL + 3;
-        DrawText(TextFormat("Textures: %d", s->preview_model.texture_count), x+PAD+4, cy, 11, C_TEXT); cy += 20;
+                 x+PAD+4, cy, FONT_LABEL, C_TEXT); cy += FONT_LABEL + 3;
+        DrawText(TextFormat("Textures: %d", s->preview_model.texture_count), x+PAD+4, cy, FONT_LABEL, C_TEXT); cy += 20;
 
         for (int i = 0; i < s->preview_model.texture_count && i < 4; i++) {
             Texture2D tex = s->preview_model.textures[i];
