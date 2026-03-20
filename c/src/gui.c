@@ -55,6 +55,10 @@ static void update_scale(void) {
 #define C_ROW_ALT   (Color){34, 34, 38, 255}
 #define C_ROW_HOVER (Color){45, 50, 65, 255}
 
+// ── Sidebar collapse state ───────────────────────────────────────────────────
+static bool sidebar_collapsed = false;
+#define COLLAPSE_BTN_W_BASE 20
+
 // ── Orbital camera ──────────────────────────────────────────────────────────
 static float cam_yaw = 0.8f, cam_pitch = 0.5f, cam_dist = 40.0f;
 static Vector3 cam_target = {8, 8, 8};
@@ -473,7 +477,8 @@ static void draw_preview_sidebar(FBAppState *s, int x, int y, int w, int h) {
     DrawText("  Left drag  - Rotate", x+PAD, cy, FONT_SMALL, C_DIM); cy += 12;
     DrawText("  Scroll     - Zoom", x+PAD, cy, FONT_SMALL, C_DIM); cy += 12;
     DrawText("  Mid drag   - Pan", x+PAD, cy, FONT_SMALL, C_DIM); cy += 12;
-    DrawText("  R - Reset   G - Grid", x+PAD, cy, FONT_SMALL, C_DIM);
+    DrawText("  R - Reset   G - Grid", x+PAD, cy, FONT_SMALL, C_DIM); cy += 12;
+    DrawText("  H - Hide sidebar", x+PAD, cy, FONT_SMALL, C_DIM);
 }
 
 static void draw_preview_viewport(FBAppState *s, int x, int y, int w, int h) {
@@ -532,11 +537,20 @@ void fb_draw_gui(FBAppState *s) {
     if (s->active_tab == TAB_PREVIEW) {
         if (IsKeyPressed(KEY_R)) reset_camera_to_model(&s->camera, &s->preview_model);
         if (IsKeyPressed(KEY_G)) show_grid = !show_grid;
+        if (IsKeyPressed(KEY_H)) sidebar_collapsed = !sidebar_collapsed;
     }
 
     // ── Compute viewport and panel sizes ───────────────────────────────
+    int collapse_btn_w = (int)(COLLAPSE_BTN_W_BASE * gui_scale);
     int vp_x, vp_w, panel_w;
-    if (s->active_tab == TAB_PREVIEW) {
+    bool preview_collapsed = (s->active_tab == TAB_PREVIEW && sidebar_collapsed);
+
+    if (preview_collapsed) {
+        // Collapsed: just a thin strip for the expand button
+        panel_w = collapse_btn_w;
+        vp_x = collapse_btn_w;
+        vp_w = sw - collapse_btn_w;
+    } else if (s->active_tab == TAB_PREVIEW) {
         panel_w = PANEL_W;
         vp_x = PANEL_W;
         vp_w = sw - PANEL_W;
@@ -548,40 +562,58 @@ void fb_draw_gui(FBAppState *s) {
     }
 
     // ── Tab bar ─────────────────────────────────────────────────────────
-    const char *tab_names[] = {"Import", "Manage", "Preview"};
-    int tab_count = 3;
-    int tab_w = panel_w / tab_count;
+    if (!preview_collapsed) {
+        const char *tab_names[] = {"Import", "Manage", "Preview"};
+        int tab_count = 3;
+        int tab_w = panel_w / tab_count;
 
-    for (int i = 0; i < tab_count; i++) {
-        Rectangle r = {(float)(i * tab_w), 0, (float)tab_w, TAB_H};
-        bool active = (s->active_tab == (FBTab)i);
-        Color bg = active ? C_PANEL : C_PANEL2;
-        Color fg = active ? RAYWHITE : C_DIM;
-        DrawRectangleRec(r, bg);
-        int tw = MeasureText(tab_names[i], 13);
-        DrawText(tab_names[i], r.x + (r.width - tw)/2, r.y + 9, 13, fg);
-        if (!active && CheckCollisionPointRec(GetMousePosition(), r) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            s->active_tab = (FBTab)i;
+        for (int i = 0; i < tab_count; i++) {
+            Rectangle r = {(float)(i * tab_w), 0, (float)tab_w, TAB_H};
+            bool active = (s->active_tab == (FBTab)i);
+            Color bg = active ? C_PANEL : C_PANEL2;
+            Color fg = active ? RAYWHITE : C_DIM;
+            DrawRectangleRec(r, bg);
+            int tw = MeasureText(tab_names[i], 13);
+            DrawText(tab_names[i], r.x + (r.width - tw)/2, r.y + 9, 13, fg);
+            if (!active && CheckCollisionPointRec(GetMousePosition(), r) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                s->active_tab = (FBTab)i;
+                if ((FBTab)i != TAB_PREVIEW) sidebar_collapsed = false;
+            }
         }
+        DrawLine(0, TAB_H, panel_w, TAB_H, C_BORDER);
     }
-    DrawLine(0, TAB_H, panel_w, TAB_H, C_BORDER);
 
     // ── Left panel content ──────────────────────────────────────────────
-    int panel_y = TAB_H;
-    int panel_h = sh - TAB_H;
+    int panel_y = preview_collapsed ? 0 : TAB_H;
+    int panel_h = sh - panel_y;
 
-    DrawRectangle(0, panel_y, panel_w, panel_h, C_PANEL);
+    if (preview_collapsed) {
+        // Draw thin collapsed strip with expand arrow
+        DrawRectangle(0, 0, collapse_btn_w, sh, C_PANEL);
+        Rectangle expand_r = {0, (float)(sh/2 - BTN_H/2), (float)collapse_btn_w, (float)BTN_H};
+        bool hover = CheckCollisionPointRec(GetMousePosition(), expand_r);
+        DrawRectangleRec(expand_r, hover ? C_ROW_HOVER : C_PANEL2);
+        // Draw ">" arrow centered
+        const char *arrow = ">";
+        int aw = MeasureText(arrow, FONT_NORMAL);
+        DrawText(arrow, (collapse_btn_w - aw)/2, sh/2 - FONT_NORMAL/2, FONT_NORMAL, hover ? RAYWHITE : C_DIM);
+        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            sidebar_collapsed = false;
+        }
+    } else {
+        DrawRectangle(0, panel_y, panel_w, panel_h, C_PANEL);
 
-    switch (s->active_tab) {
-        case TAB_IMPORT:
-            draw_import_tab(s, 0, panel_y, panel_w, panel_h);
-            break;
-        case TAB_MANAGE:
-            draw_manage_tab(s, 0, panel_y, panel_w, panel_h);
-            break;
-        case TAB_PREVIEW:
-            draw_preview_sidebar(s, 0, panel_y, panel_w, panel_h);
-            break;
+        switch (s->active_tab) {
+            case TAB_IMPORT:
+                draw_import_tab(s, 0, panel_y, panel_w, panel_h);
+                break;
+            case TAB_MANAGE:
+                draw_manage_tab(s, 0, panel_y, panel_w, panel_h);
+                break;
+            case TAB_PREVIEW:
+                draw_preview_sidebar(s, 0, panel_y, panel_w, panel_h);
+                break;
+        }
     }
 
     if (vp_w > 0) {
@@ -592,5 +624,19 @@ void fb_draw_gui(FBAppState *s) {
     // Panel/viewport border
     if (vp_w > 0) {
         DrawLine(vp_x, 0, vp_x, sh, C_BORDER);
+    }
+
+    // Collapse button (drawn on top of the border, visible when sidebar is open in preview tab)
+    if (s->active_tab == TAB_PREVIEW && !sidebar_collapsed) {
+        Rectangle col_r = {(float)(vp_x - collapse_btn_w), (float)(sh/2 - BTN_H/2), (float)collapse_btn_w, (float)BTN_H};
+        bool col_hover = CheckCollisionPointRec(GetMousePosition(), col_r);
+        DrawRectangleRec(col_r, col_hover ? C_ROW_HOVER : C_PANEL2);
+        DrawRectangleLines((int)col_r.x, (int)col_r.y, (int)col_r.width, (int)col_r.height, C_BORDER);
+        const char *arr = "<";
+        int arrw = MeasureText(arr, FONT_NORMAL);
+        DrawText(arr, (int)(col_r.x + (col_r.width - arrw)/2), sh/2 - FONT_NORMAL/2, FONT_NORMAL, col_hover ? RAYWHITE : C_DIM);
+        if (col_hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            sidebar_collapsed = true;
+        }
     }
 }
