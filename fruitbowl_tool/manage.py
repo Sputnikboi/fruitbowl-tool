@@ -12,7 +12,7 @@ from .constants import (
     TEXTURE_DIR, MODEL_DIR, FB_ITEMS_DIR, MC_ITEMS_DIR,
     MODEL_LIST, ITEM_TO_HEADING,
 )
-from .core import sync_helmets
+from .core import sync_helmets, update_minecraft_item, update_model_list
 
 
 def _parse_model_list(pack_root: str) -> dict[str, dict[str, str]]:
@@ -319,6 +319,37 @@ def delete_model(pack_root: str, mc_item_id: str, model_name: str,
 
     # Auto-sync helmets if we modified stone_button
     if mc_item_id == "stone_button":
+        log.extend(sync_helmets(pack_root))
+
+    return log
+
+
+def duplicate_to_item(pack_root: str, model_name: str, target_item_id: str,
+                      author: str = "",
+                      heading_override: str = "") -> list[tuple[str, str]]:
+    """
+    Register an existing model on a new item type.
+    Only adds the dispatch entry and model list entry — no files are copied
+    since the texture/model/item def are shared.
+    Returns a list of (tag, message) log tuples.
+    """
+    log = []
+
+    mc_item_path = os.path.join(pack_root, MC_ITEMS_DIR, f"{target_item_id}.json")
+    os.makedirs(os.path.dirname(mc_item_path), exist_ok=True)
+
+    threshold, was_duplicate = update_minecraft_item(mc_item_path, model_name, target_item_id)
+    if was_duplicate:
+        log.append(("warn", f"⚠ Already in {target_item_id}.json at threshold {threshold}"))
+    else:
+        log.append(("success", f"✓ Added to {target_item_id}.json → threshold {threshold}"))
+
+    # Add to model list
+    log.append(update_model_list(
+        pack_root, target_item_id, model_name, threshold, author, heading_override))
+
+    # Auto-sync helmets if target is stone_button
+    if target_item_id == "stone_button":
         log.extend(sync_helmets(pack_root))
 
     return log

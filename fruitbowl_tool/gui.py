@@ -14,7 +14,7 @@ from .core import (
     sanitize_name, check_existing, needs_heading_name, scan_pack_items,
     add_to_pack,
 )
-from .manage import scan_all_models, delete_model, update_author
+from .manage import scan_all_models, delete_model, update_author, duplicate_to_item
 from .deploy import zip_pack, compute_sha1, update_server_properties, upload_to_github, deploy_full, get_pack_url
 from .zfight import scan_pack as zfight_scan_pack, format_report as zfight_format_report
 
@@ -288,6 +288,8 @@ class FruitbowlApp:
                    command=self._manage_scan).pack(pady=2)
         ttk.Button(btn_col, text="Set Author…", width=12,
                    command=self._manage_set_author).pack(pady=(16, 2))
+        ttk.Button(btn_col, text="Duplicate To…", width=12,
+                   command=self._manage_duplicate).pack(pady=(16, 2))
         ttk.Button(btn_col, text="Delete", width=12,
                    command=self._manage_delete).pack(pady=(16, 2))
         ttk.Button(btn_col, text="Update…", width=12,
@@ -894,6 +896,105 @@ class FruitbowlApp:
         entry.bind("<Return>", finish)
         entry.bind("<FocusOut>", finish)
         entry.bind("<Escape>", lambda e: entry.destroy())
+
+    def _manage_duplicate(self):
+        """Duplicate selected model(s) to a different item type."""
+        selected = self.manage_tree.selection()
+        if not selected:
+            messagebox.showinfo("No selection", "Select one or more models to duplicate.")
+            return
+
+        pack = self.pack_path.get().strip()
+        if not pack or not os.path.isdir(pack):
+            self._log_to(self.manage_log, "ERROR: Invalid pack path.", "error")
+            return
+
+        to_dup = [self.manage_models[int(iid)] for iid in selected]
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Duplicate To Item")
+        dialog.resizable(False, False)
+        dialog.grab_set()
+
+        names = ", ".join(m["model_name"] for m in to_dup[:3])
+        if len(to_dup) > 3:
+            names += f" … +{len(to_dup) - 3} more"
+
+        ttk.Label(dialog, text=f"Duplicate {len(to_dup)} model(s) to a new item type:",
+                  padding=(12, 12, 12, 4)).pack()
+        ttk.Label(dialog, text=names, font=("Consolas", 8),
+                  padding=(12, 0, 12, 8)).pack()
+
+        ttk.Label(dialog, text="Target item:", padding=(12, 4, 12, 0)).pack(anchor="w")
+        item_var = tk.StringVar()
+        item_combo = ttk.Combobox(dialog, textvariable=item_var,
+                                   values=self.available_items, width=30)
+        item_combo.pack(padx=12, pady=4)
+
+        result = {"cancelled": True}
+
+        def apply():
+            result["cancelled"] = False
+            dialog.destroy()
+
+        def cancel():
+            dialog.destroy()
+
+        item_combo.bind("<Return>", lambda e: apply())
+        dialog.bind("<Escape>", lambda e: cancel())
+
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(pady=(8, 12))
+        ttk.Button(btn_frame, text="Duplicate", command=apply, width=10).pack(
+            side="left", padx=4)
+        ttk.Button(btn_frame, text="Cancel", command=cancel, width=8).pack(
+            side="left", padx=4)
+
+        dialog.wait_window()
+
+        if result["cancelled"]:
+            return
+
+        target = item_var.get().strip().lower().replace(" ", "_")
+        if not target:
+            self._log_to(self.manage_log, "ERROR: No target item selected.", "error")
+            return
+
+        # Check if target needs a custom heading
+        from .core import needs_heading_name
+        heading = ""
+        if needs_heading_name(pack, target):
+            heading = self._ask_heading_name(target)
+            if heading is None:
+                self._log_to(self.manage_log, "Cancelled.", "warn")
+                return
+            if heading:
+                self.settings.setdefault("custom_headings", {})[target] = heading
+                save_settings(self.settings)
+
+        self._log_clear(self.manage_log)
+        self._log_to(self.manage_log,
+                     f"Duplicating {len(to_dup)} model(s) → {target}", "header")
+        self._log_to(self.manage_log, "─" * 50, "info")
+
+        for m in to_dup:
+            self._log_to(self.manage_log, f"  {m['model_name']}", "header")
+            try:
+                msgs = duplicate_to_item(
+                    pack, m["model_name"], target,
+                    author=m.get("author", ""),
+                    heading_override=heading)
+                for tag, msg in msgs:
+                    self._log_to(self.manage_log, f"    {msg}", tag)
+            except Exception as e:
+                self._log_to(self.manage_log, f"    ERROR: {e}", "error")
+
+        self._log_to(self.manage_log, "─" * 50, "info")
+        self._log_to(self.manage_log, "Done.", "success")
+
+        # Auto-rescan
+        self.manage_models = scan_all_models(pack)
+        self._manage_populate_tree()
 
     def _manage_delete(self):
         selected = self.manage_tree.selection()
