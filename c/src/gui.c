@@ -57,7 +57,7 @@ static void update_scale(void) {
 
 // ── Sidebar collapse state ───────────────────────────────────────────────────
 static bool sidebar_collapsed = false;
-#define COLLAPSE_BTN_W_BASE 20
+#define COLLAPSE_BTN_W_BASE 24
 
 // ── Orbital camera ──────────────────────────────────────────────────────────
 static float cam_yaw = 0.8f, cam_pitch = 0.5f, cam_dist = 40.0f;
@@ -588,11 +588,10 @@ void fb_draw_gui(FBAppState *s) {
     int panel_h = sh - panel_y;
 
     if (preview_collapsed) {
-        // Draw thin collapsed strip with expand arrow
-        DrawRectangle(0, 0, collapse_btn_w, sh, C_PANEL);
-        Rectangle expand_r = {0, (float)(sh/2 - BTN_H/2), (float)collapse_btn_w, (float)BTN_H};
-        bool hover = CheckCollisionPointRec(GetMousePosition(), expand_r);
-        DrawRectangleRec(expand_r, hover ? C_ROW_HOVER : C_PANEL2);
+        // Draw thin collapsed strip — entire strip is clickable to expand
+        Rectangle strip_r = {0, 0, (float)collapse_btn_w, (float)sh};
+        bool hover = CheckCollisionPointRec(GetMousePosition(), strip_r);
+        DrawRectangleRec(strip_r, hover ? C_ROW_HOVER : C_PANEL);
         // Draw ">" arrow centered
         const char *arrow = ">";
         int aw = MeasureText(arrow, FONT_NORMAL);
