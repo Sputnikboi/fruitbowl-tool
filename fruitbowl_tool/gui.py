@@ -368,23 +368,18 @@ class FruitbowlApp:
         typed = combo.get().lower()
         if not typed:
             combo["values"] = self.available_items
-            combo.event_generate("<Escape>")  # close dropdown
+            try:
+                combo.tk.call("ttk::combobox::Unpost", combo)
+            except Exception:
+                pass
             return
         filtered = [item for item in self.available_items if typed in item]
         combo["values"] = filtered
         if filtered:
-            # Open dropdown after current event finishes so it doesn't steal focus
-            cursor_pos = combo.index("insert")
-            combo.after(1, lambda: self._open_combo_dropdown(combo, cursor_pos))
-
-    def _open_combo_dropdown(self, combo: ttk.Combobox, cursor_pos: int):
-        """Open the combobox dropdown and restore cursor position."""
-        try:
-            combo.event_generate("<Down>")
-            combo.focus_set()
-            combo.icursor(cursor_pos)
-        except Exception:
-            pass
+            try:
+                combo.tk.call("ttk::combobox::Post", combo)
+            except Exception:
+                pass
 
     def _ask_heading_name(self, item_id: str) -> str | None:
         saved = self.settings.get("custom_headings", {}).get(item_id)
