@@ -1,0 +1,3 @@
+/home/sputnikboi/.local/lib/python3.12/site-packages/cmake/data/bin/cmake -E rm -f CMakeFiles/fruitbowl_tool.dir/objects.a
+/usr/bin/x86_64-w64-mingw32-ar qc CMakeFiles/fruitbowl_tool.dir/objects.a @CMakeFiles/fruitbowl_tool.dir/objects1.rsp
+/usr/bin/x86_64-w64-mingw32-gcc -O3 -DNDEBUG -mwindows -Wl,--whole-archive CMakeFiles/fruitbowl_tool.dir/objects.a -Wl,--no-whole-archive -o fruitbowl_tool.exe -Wl,--out-implib,libfruitbowl_tool.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles/fruitbowl_tool.dir/linkLibs.rsp

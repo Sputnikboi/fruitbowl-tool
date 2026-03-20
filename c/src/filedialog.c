@@ -1,4 +1,5 @@
 #include "filedialog.h"
+#include <stddef.h>
 #include "tinyfiledialogs.h"
 #include "raylib.h"
 #include <string.h>

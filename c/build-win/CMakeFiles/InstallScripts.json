@@ -1,0 +1,11 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/sputnikboi/Git/fruitbowl-tool/c/build-win/cmake_install.cmake",
+		"/home/sputnikboi/Git/fruitbowl-tool/c/build-win/_deps/raylib-build/cmake_install.cmake",
+		"/home/sputnikboi/Git/fruitbowl-tool/c/build-win/_deps/raylib-build/raylib/cmake_install.cmake",
+		"/home/sputnikboi/Git/fruitbowl-tool/c/build-win/_deps/raylib-build/raylib/external/glfw/cmake_install.cmake",
+		"/home/sputnikboi/Git/fruitbowl-tool/c/build-win/_deps/raylib-build/raylib/external/glfw/src/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

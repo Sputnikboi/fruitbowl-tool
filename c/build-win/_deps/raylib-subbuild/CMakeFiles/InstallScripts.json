@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/sputnikboi/Git/fruitbowl-tool/c/build-win/_deps/raylib-subbuild/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
