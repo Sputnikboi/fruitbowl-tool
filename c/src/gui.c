@@ -12,14 +12,33 @@
 #include <stdio.h>
 #include <math.h>
 
-// ── Layout ──────────────────────────────────────────────────────────────────
-#define PANEL_W     380
-#define TAB_H       32
-#define PAD         8
-#define ROW_H       22
-#define FIELD_H     24
-#define BTN_H       28
-#define LOG_LINES   8
+// ── Layout (base values, multiplied by gui_scale) ───────────────────────────
+#define PANEL_W_BASE 380
+#define TAB_H_BASE   32
+#define PAD_BASE     8
+#define ROW_H_BASE   24
+#define FIELD_H_BASE 26
+#define BTN_H_BASE   30
+
+// Scale factor — adjust this to make everything bigger/smaller
+static float gui_scale = 1.3f;
+
+// Scaled helpers (recomputed each frame for resize support)
+static int PANEL_W, TAB_H, PAD, ROW_H, FIELD_H, BTN_H;
+static int FONT_LABEL, FONT_SMALL, FONT_NORMAL, FONT_TITLE;
+
+static void update_scale(void) {
+    PANEL_W    = (int)(PANEL_W_BASE * gui_scale);
+    TAB_H      = (int)(TAB_H_BASE * gui_scale);
+    PAD        = (int)(PAD_BASE * gui_scale);
+    ROW_H      = (int)(ROW_H_BASE * gui_scale);
+    FIELD_H    = (int)(FIELD_H_BASE * gui_scale);
+    BTN_H      = (int)(BTN_H_BASE * gui_scale);
+    FONT_LABEL = (int)(11 * gui_scale);
+    FONT_SMALL = (int)(10 * gui_scale);
+    FONT_NORMAL= (int)(12 * gui_scale);
+    FONT_TITLE = (int)(14 * gui_scale);
+}
 
 // ── Colors ──────────────────────────────────────────────────────────────────
 #define C_BG        (Color){35, 35, 38, 255}
@@ -90,7 +109,7 @@ static void update_orbital_camera(Camera3D *cam, int viewport_x) {
 // ── Log drawing ─────────────────────────────────────────────────────────────
 static void draw_log(FBLog *log, int x, int y, int w, int h) {
     DrawRectangle(x, y, w, h, (Color){20, 20, 22, 255});
-    int line_h = 14;
+    int line_h = FONT_LABEL + 3;
     int max_lines = h / line_h;
     int start = log->count > max_lines ? log->count - max_lines : 0;
     for (int i = start; i < log->count; i++) {
@@ -109,7 +128,7 @@ static void draw_log(FBLog *log, int x, int y, int w, int h) {
 
 // ── Label + text field helper ───────────────────────────────────────────────
 static bool gui_labeled_field(int x, int y, int w, const char *label, char *buf, int buf_size) {
-    DrawText(label, x, y, 11, C_DIM);
+    DrawText(label, x, y, FONT_LABEL, C_DIM);
     Rectangle r = {(float)x, (float)(y + 14), (float)w, FIELD_H};
     // Use raygui textbox
     int result = GuiTextBox(r, buf, buf_size, CheckCollisionPointRec(GetMousePosition(), r) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
@@ -126,7 +145,7 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     int cy = y + PAD;
 
     int browse_w = 60;
-    DrawText("Resource Pack Folder", x + PAD, cy, 11, C_DIM); cy += 14;
+    DrawText("Resource Pack Folder", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
     Rectangle pack_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD-browse_w-PAD), FIELD_H};
     if (GuiTextBox(pack_r, s->pack_path, FB_MAX_PATH, import_editing[0])) import_editing[0] = !import_editing[0];
     Rectangle pack_btn = {(float)(x+w-PAD-browse_w), (float)cy, (float)browse_w, FIELD_H};
@@ -138,7 +157,7 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     }
     cy += FIELD_H + PAD;
 
-    DrawText("BBModel File (drag & drop or browse)", x + PAD, cy, 11, C_DIM); cy += 14;
+    DrawText("BBModel File (drag & drop or browse)", x + PAD, cy, 11, C_DIM); cy += FONT_LABEL + 3;
     Rectangle bb_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD-browse_w-PAD), FIELD_H};
     if (GuiTextBox(bb_r, s->bbmodel_path, FB_MAX_PATH, import_editing[1])) import_editing[1] = !import_editing[1];
     Rectangle bb_btn = {(float)(x+w-PAD-browse_w), (float)cy, (float)browse_w, FIELD_H};
@@ -158,17 +177,17 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     }
     cy += FIELD_H + PAD;
 
-    DrawText("Model Name (blank = from filename)", x + PAD, cy, 11, C_DIM); cy += 14;
+    DrawText("Model Name (blank = from filename)", x + PAD, cy, 11, C_DIM); cy += FONT_LABEL + 3;
     Rectangle name_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), FIELD_H};
     if (GuiTextBox(name_r, s->model_name, FB_MAX_NAME, import_editing[2])) import_editing[2] = !import_editing[2];
     cy += FIELD_H + PAD;
 
-    DrawText("Author (optional)", x + PAD, cy, 11, C_DIM); cy += 14;
+    DrawText("Author (optional)", x + PAD, cy, 11, C_DIM); cy += FONT_LABEL + 3;
     Rectangle auth_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), FIELD_H};
     if (GuiTextBox(auth_r, s->author, FB_MAX_NAME, import_editing[3])) import_editing[3] = !import_editing[3];
     cy += FIELD_H + PAD;
 
-    DrawText("Minecraft Item", x + PAD, cy, 11, C_DIM); cy += 14;
+    DrawText("Minecraft Item", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
     Rectangle item_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), FIELD_H};
     static bool item_edit = false;
     if (GuiTextBox(item_r, s->item_type, FB_MAX_NAME, item_edit)) item_edit = !item_edit;
@@ -196,7 +215,7 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     cy += BTN_H + PAD;
 
     // Log
-    DrawText("Output", x + PAD, cy, 11, C_DIM); cy += 14;
+    DrawText("Output", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
     draw_log(&s->log, x + PAD, cy, w - 2*PAD, h - (cy - y) - PAD);
 }
 
@@ -225,7 +244,7 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
     int cy = y + PAD;
 
     // Pack path
-    DrawText("Resource Pack Folder", x+PAD, cy, 11, C_DIM); cy += 14;
+    DrawText("Resource Pack Folder", x+PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
     int mgr_browse_w = 60, mgr_scan_w = 80;
     Rectangle pack_r = {(float)(x+PAD), (float)cy, (float)(w - 2*PAD - mgr_browse_w - mgr_scan_w - 2*PAD), FIELD_H};
     static bool pack_edit_m = false;
@@ -251,23 +270,28 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
     cy += FIELD_H + PAD;
 
     // Filter
-    DrawText("Search (type 'noauthor' to find missing)", x+PAD, cy, 11, C_DIM); cy += 14;
+    DrawText("Search (type 'noauthor' to find missing)", x+PAD, cy, 11, C_DIM); cy += FONT_LABEL + 3;
     Rectangle filt_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), FIELD_H};
     if (GuiTextBox(filt_r, s->manage_filter, FB_MAX_NAME, filter_editing)) filter_editing = !filter_editing;
     cy += FIELD_H + PAD;
 
-    // Model list header
+    // Model list header — columns proportional to width
     int list_x = x + PAD;
     int list_w = w - 2*PAD;
-    int col_type = 80, col_name = 130, col_num = 30, col_author = 80, col_status = 40;
+    int col_num = (int)(35 * gui_scale);
+    int col_status = (int)(35 * gui_scale);
+    int remaining = list_w - col_num - col_status;
+    int col_type = remaining * 22 / 100;
+    int col_name = remaining * 40 / 100;
+    int col_author = remaining - col_type - col_name;
 
     DrawRectangle(list_x, cy, list_w, ROW_H, C_BORDER);
     int cx = list_x + 4;
-    DrawText("Type", cx, cy+4, 11, RAYWHITE); cx += col_type;
-    DrawText("Model", cx, cy+4, 11, RAYWHITE); cx += col_name;
-    DrawText("#", cx, cy+4, 11, RAYWHITE); cx += col_num;
-    DrawText("Author", cx, cy+4, 11, RAYWHITE); cx += col_author;
-    DrawText("OK", cx, cy+4, 11, RAYWHITE);
+    DrawText("Type", cx, cy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, RAYWHITE); cx += col_type;
+    DrawText("Model", cx, cy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, RAYWHITE); cx += col_name;
+    DrawText("#", cx, cy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, RAYWHITE); cx += col_num;
+    DrawText("Author", cx, cy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, RAYWHITE); cx += col_author;
+    DrawText("OK", cx, cy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, RAYWHITE);
     cy += ROW_H;
 
     // Scrollable model list
@@ -322,18 +346,14 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
         // Columns
         bool all_ok = e->has_texture && e->has_model && e->has_item_def;
         Color text_c = all_ok ? C_TEXT : C_YELLOW;
+        int ty = ry + ROW_H/2 - FONT_SMALL/2;
 
         cx = list_x + 4;
-        DrawText(e->item_type, cx, ry+4, 10, text_c); cx += col_type;
-
-        // Truncate model name if too long
-        char name_buf[24];
-        snprintf(name_buf, sizeof(name_buf), "%.22s", e->model_name);
-        DrawText(name_buf, cx, ry+4, 10, text_c); cx += col_name;
-
-        DrawText(TextFormat("%d", e->threshold), cx, ry+4, 10, text_c); cx += col_num;
-        DrawText(e->author[0] ? e->author : "-", cx, ry+4, 10, e->author[0] ? text_c : C_DIM); cx += col_author;
-        DrawText(all_ok ? "OK" : "!!", cx, ry+4, 10, all_ok ? C_GREEN : C_RED);
+        DrawText(e->item_type, cx, ty, FONT_SMALL, text_c); cx += col_type;
+        DrawText(e->model_name, cx, ty, FONT_SMALL, text_c); cx += col_name;
+        DrawText(TextFormat("%d", e->threshold), cx, ty, FONT_SMALL, text_c); cx += col_num;
+        DrawText(e->author[0] ? e->author : "-", cx, ty, FONT_SMALL, e->author[0] ? text_c : C_DIM); cx += col_author;
+        DrawText(all_ok ? "OK" : "!!", cx, ty, FONT_SMALL, all_ok ? C_GREEN : C_RED);
 
         row_count++;
     }
@@ -406,7 +426,7 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
     cy += BTN_H + PAD;
 
     // Log
-    DrawText("Output", x + PAD, cy, 11, C_DIM); cy += 14;
+    DrawText("Output", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
     draw_log(&s->log, x + PAD, cy, w - 2*PAD, h - (cy - y) - PAD);
 }
 
@@ -417,16 +437,16 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
 static void draw_preview_sidebar(FBAppState *s, int x, int y, int w, int h) {
     int cy = y + PAD;
 
-    DrawText("Drag & drop a .bbmodel file", x+PAD, cy, 12, C_DIM); cy += 16;
-    DrawText("onto this window to preview", x+PAD, cy, 12, C_DIM); cy += 24;
+    DrawText("Drag & drop a .bbmodel file", x+PAD, cy, FONT_NORMAL, C_DIM); cy += 16;
+    DrawText("onto this window to preview", x+PAD, cy, FONT_NORMAL, C_DIM); cy += 24;
 
     if (s->preview_loaded) {
         DrawLine(x, cy, x+w, cy, C_BORDER); cy += PAD;
-        DrawText("Loaded Model:", x+PAD, cy, 13, C_GREEN); cy += 18;
-        DrawText(TextFormat("Name: %s", s->preview_model.name), x+PAD+4, cy, 11, C_TEXT); cy += 14;
-        DrawText(TextFormat("Elements: %d", s->preview_model.element_count), x+PAD+4, cy, 11, C_TEXT); cy += 14;
+        DrawText("Loaded Model:", x+PAD, cy, FONT_TITLE, C_GREEN); cy += 18;
+        DrawText(TextFormat("Name: %s", s->preview_model.name), x+PAD+4, cy, 11, C_TEXT); cy += FONT_LABEL + 3;
+        DrawText(TextFormat("Elements: %d", s->preview_model.element_count), x+PAD+4, cy, 11, C_TEXT); cy += FONT_LABEL + 3;
         DrawText(TextFormat("Texture: %dx%d", s->preview_model.texture_size[0], s->preview_model.texture_size[1]),
-                 x+PAD+4, cy, 11, C_TEXT); cy += 14;
+                 x+PAD+4, cy, 11, C_TEXT); cy += FONT_LABEL + 3;
         DrawText(TextFormat("Textures: %d", s->preview_model.texture_count), x+PAD+4, cy, 11, C_TEXT); cy += 20;
 
         for (int i = 0; i < s->preview_model.texture_count && i < 4; i++) {
@@ -442,11 +462,11 @@ static void draw_preview_sidebar(FBAppState *s, int x, int y, int w, int h) {
     // Controls
     cy = y + h - 90;
     DrawLine(x, cy, x+w, cy, C_BORDER); cy += PAD;
-    DrawText("Controls:", x+PAD, cy, 12, C_TEXT); cy += 16;
-    DrawText("  Left drag  - Rotate", x+PAD, cy, 10, C_DIM); cy += 12;
-    DrawText("  Scroll     - Zoom", x+PAD, cy, 10, C_DIM); cy += 12;
-    DrawText("  Mid drag   - Pan", x+PAD, cy, 10, C_DIM); cy += 12;
-    DrawText("  R - Reset   G - Grid", x+PAD, cy, 10, C_DIM);
+    DrawText("Controls:", x+PAD, cy, FONT_NORMAL, C_TEXT); cy += 16;
+    DrawText("  Left drag  - Rotate", x+PAD, cy, FONT_SMALL, C_DIM); cy += 12;
+    DrawText("  Scroll     - Zoom", x+PAD, cy, FONT_SMALL, C_DIM); cy += 12;
+    DrawText("  Mid drag   - Pan", x+PAD, cy, FONT_SMALL, C_DIM); cy += 12;
+    DrawText("  R - Reset   G - Grid", x+PAD, cy, FONT_SMALL, C_DIM);
 }
 
 static void draw_preview_viewport(FBAppState *s, int x, int y, int w, int h) {
@@ -474,6 +494,7 @@ static void draw_preview_viewport(FBAppState *s, int x, int y, int w, int h) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 void fb_draw_gui(FBAppState *s) {
+    update_scale();
     int sw = GetScreenWidth(), sh = GetScreenHeight();
 
     // Handle drag & drop (works in all tabs)
