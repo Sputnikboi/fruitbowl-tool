@@ -132,3 +132,78 @@ void fb_log(FBLog *log, FBLogLevel level, const char *fmt, ...) {
 void fb_log_clear(FBLog *log) {
     log->count = 0;
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Settings persistence
+// ═════════════════════════════════════════════════════════════════════════════
+
+#include "cJSON.h"
+
+static void get_settings_path(char *out, int max_len) {
+    const char *home = getenv("HOME");
+    if (!home) home = getenv("USERPROFILE");
+    if (!home) home = ".";
+    snprintf(out, max_len, "%s/.fruitbowl_tool.json", home);
+}
+
+void fb_load_settings(FBAppState *state) {
+    char settings_path[FB_MAX_PATH];
+    get_settings_path(settings_path, sizeof(settings_path));
+
+    int file_len;
+    char *json_str = fb_read_file(settings_path, &file_len);
+    if (!json_str) { state->settings_loaded = true; return; }
+
+    cJSON *root = cJSON_Parse(json_str);
+    free(json_str);
+    if (!root) { state->settings_loaded = true; return; }
+
+    cJSON *pack_path = cJSON_GetObjectItem(root, "pack_path");
+    if (pack_path && cJSON_IsString(pack_path)) {
+        strncpy(state->pack_path, pack_path->valuestring, FB_MAX_PATH - 1);
+    }
+
+    cJSON *headings = cJSON_GetObjectItem(root, "custom_headings");
+    if (headings && cJSON_IsObject(headings)) {
+        cJSON *entry;
+        int i = 0;
+        cJSON_ArrayForEach(entry, headings) {
+            if (i >= FB_MAX_HEADINGS) break;
+            if (!cJSON_IsString(entry)) continue;
+            strncpy(state->custom_headings[i].item_id, entry->string, FB_MAX_NAME - 1);
+            strncpy(state->custom_headings[i].heading, entry->valuestring, FB_MAX_NAME - 1);
+            i++;
+        }
+        state->custom_heading_count = i;
+    }
+
+    cJSON_Delete(root);
+    state->settings_loaded = true;
+}
+
+void fb_save_settings(const FBAppState *state) {
+    cJSON *root = cJSON_CreateObject();
+
+    if (state->pack_path[0]) {
+        cJSON_AddStringToObject(root, "pack_path", state->pack_path);
+    }
+
+    if (state->custom_heading_count > 0) {
+        cJSON *headings = cJSON_AddObjectToObject(root, "custom_headings");
+        for (int i = 0; i < state->custom_heading_count; i++) {
+            cJSON_AddStringToObject(headings,
+                                    state->custom_headings[i].item_id,
+                                    state->custom_headings[i].heading);
+        }
+    }
+
+    char *json_str = cJSON_Print(root);
+    cJSON_Delete(root);
+
+    if (json_str) {
+        char settings_path[FB_MAX_PATH];
+        get_settings_path(settings_path, sizeof(settings_path));
+        fb_write_file(settings_path, json_str, (int)strlen(json_str));
+        cJSON_free(json_str);
+    }
+}

@@ -190,7 +190,7 @@ Golden Carrot:
 Feather:
 1 = Emdi Unicorn Tail (Brok - Emdi)
 2 = Blank Blackboard (Mag)
-3 = Black Board Periodic (Mag)
+3 = Saltine Cracker (Belle)
 4 = Flower (Brok)
 5 = Lilypad (Brok)
 6 = Whiteboard (Brok)

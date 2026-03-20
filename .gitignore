@@ -3,3 +3,4 @@ __pycache__/
 .fruitbowl_tool.json
 c/fruitbowl_tool
 c/lib/libraylib.a
+c/build/

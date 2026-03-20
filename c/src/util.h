@@ -16,4 +16,8 @@ void fb_ensure_dir(const char *path);
 void fb_log(FBLog *log, FBLogLevel level, const char *fmt, ...);
 void fb_log_clear(FBLog *log);
 
+// Settings persistence (~/.fruitbowl_tool.json)
+void fb_load_settings(FBAppState *state);
+void fb_save_settings(const FBAppState *state);
+
 #endif // FB_UTIL_H

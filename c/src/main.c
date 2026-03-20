@@ -2,11 +2,15 @@
 #include "gui.h"
 #include "renderer.h"
 #include "model.h"
+#include "util.h"
 #include <string.h>
 
 int main(int argc, char **argv) {
     FBAppState state = {0};
     state.manage_selected = -1;
+    state.batch_selected = -1;
+    state.manage_editing_author = -1;
+    state.manage_sort_asc = true;
     state.active_tab = TAB_PREVIEW;
     fb_init_camera(&state.camera);
 
@@ -15,7 +19,8 @@ int main(int argc, char **argv) {
     SetTargetFPS(60);
     SetTraceLogLevel(LOG_WARNING);
 
-    // Style is configured in gui.c
+    // Load persistent settings (pack_path, custom_headings)
+    fb_load_settings(&state);
 
     // Load .bbmodel from command line
     if (argc > 1) {
@@ -36,6 +41,9 @@ int main(int argc, char **argv) {
         fb_draw_gui(&state);
         EndDrawing();
     }
+
+    // Save settings on exit
+    fb_save_settings(&state);
 
     if (state.preview_loaded) fb_unload_model_textures(&state.preview_model);
     CloseWindow();

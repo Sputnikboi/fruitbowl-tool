@@ -14,9 +14,11 @@
 // ── Import a bbmodel into the pack ──────────────────────────────────────────
 // Full pipeline: extract textures, build model JSON, create item def,
 // update dispatch, update model list, sync helmets if needed.
+// heading_override: if non-NULL, used instead of fb_heading_for_item().
 bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
                     const char *mc_item_id, const char *model_name,
-                    const char *author, FBLog *log);
+                    const char *author, const char *heading_override,
+                    FBLog *log);
 
 // ── Scan pack for all registered models ─────────────────────────────────────
 int fb_scan_pack(const char *pack_root, FBPackEntry *entries, int max_entries);
@@ -46,5 +48,29 @@ const char *fb_heading_for_item(const char *mc_item_id);
 
 // ── Get block fallback model for an item ID (NULL if normal item) ───────────
 const char *fb_block_fallback(const char *mc_item_id);
+
+// ── Zip the resource pack ───────────────────────────────────────────────────
+// Creates a .zip at output_path from pack_root, excluding .git, .zip, etc.
+// If output_path is NULL, defaults to <pack_parent>/<zip_name>.
+bool fb_zip_pack(const char *pack_root, const char *output_path,
+                 FBLog *log);
+
+// ── Scan pack for known item types (from MC items dir + known list) ─────────
+int fb_scan_pack_items(const char *pack_root, char items[][FB_MAX_NAME],
+                       int max_items);
+
+// ── Check if a model already exists in the pack ─────────────────────────────
+bool fb_check_existing(const char *pack_root, const char *model_name,
+                       FBLog *log);
+
+// ── Check if an item type needs a custom heading name ───────────────────────
+// Returns true if the item has no built-in heading and no custom heading.
+bool fb_needs_heading_name(const char *mc_item_id,
+                           const FBCustomHeading *headings, int heading_count);
+
+// ── Get custom heading for an item ID (or NULL) ─────────────────────────────
+const char *fb_custom_heading_for(const char *mc_item_id,
+                                  const FBCustomHeading *headings,
+                                  int heading_count);
 
 #endif // FB_PACK_H

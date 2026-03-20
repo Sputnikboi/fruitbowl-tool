@@ -24,7 +24,10 @@ add_executable(fruitbowl_tool
     src/renderer.c
     src/gui.c
     src/util.c
+    src/filedialog.c
     lib/cJSON.c
+    lib/tinyfiledialogs.c
+    lib/miniz.c
 )
 
 target_include_directories(fruitbowl_tool PRIVATE

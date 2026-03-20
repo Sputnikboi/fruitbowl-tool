@@ -20,7 +20,9 @@ typedef struct {
     float uv[4];
     int   texture_idx;
     int   rotation;
+    int   tintindex;
     bool  has_texture;
+    bool  has_tintindex;
 } FBFace;
 
 typedef struct {
@@ -63,12 +65,15 @@ typedef struct {
     bool       has_display;
     Texture2D  textures[FB_MAX_TEXTURES];
     bool       textures_loaded;
+    char       groups_json[8192]; // raw JSON for groups (preserved from bbmodel)
+    bool       has_groups;
 } FBModel;
 
 // ── Pack management ─────────────────────────────────────────────────────────
 
 typedef struct {
-    char item_type[FB_MAX_NAME];
+    char item_type[FB_MAX_NAME];       // display name ("hats" for stone_button)
+    char real_item_type[FB_MAX_NAME];  // actual MC item ID ("stone_button")
     char model_name[FB_MAX_NAME];
     int  threshold;
     char author[FB_MAX_NAME];
@@ -102,9 +107,29 @@ typedef struct {
 
 typedef enum {
     TAB_IMPORT,
+    TAB_BATCH,
     TAB_MANAGE,
     TAB_PREVIEW,
 } FBTab;
+
+// ── Batch entry ──────────────────────────────────────────────────────────────
+
+typedef struct {
+    char path[FB_MAX_PATH];
+    char author[FB_MAX_NAME];
+    char display_name[FB_MAX_NAME]; // derived from filename for display
+} FBBatchEntry;
+
+// ── Custom heading persistence ──────────────────────────────────────────────
+
+typedef struct {
+    char item_id[FB_MAX_NAME];
+    char heading[FB_MAX_NAME];
+} FBCustomHeading;
+
+#define FB_MAX_BATCH        256
+#define FB_MAX_HEADINGS     64
+#define FB_MAX_SUGGESTIONS  64
 
 typedef struct {
     // Paths
@@ -126,11 +151,41 @@ typedef struct {
     int         manage_selected;        // index into pack_entries, -1 = none
     char        manage_filter[FB_MAX_NAME];
     float       manage_scroll;
+    int         manage_sort_col;        // 0=type,1=name,2=threshold,3=author,4=status
+    bool        manage_sort_asc;
 
     // Preview
     FBModel     preview_model;
     bool        preview_loaded;
     Camera3D    camera;
+
+    // Batch mode
+    FBBatchEntry batch_entries[FB_MAX_BATCH];
+    int          batch_count;
+    int          batch_selected;        // -1 = none
+    float        batch_scroll;
+
+    // Item type suggestions (from scan_pack_items)
+    char        item_suggestions[FB_MAX_SUGGESTIONS][FB_MAX_NAME];
+    int         item_suggestion_count;
+    bool        item_dropdown_open;
+    int         item_dropdown_scroll;
+
+    // Settings persistence
+    FBCustomHeading custom_headings[FB_MAX_HEADINGS];
+    int             custom_heading_count;
+    bool            settings_loaded;
+
+    // Heading name dialog
+    bool        heading_dialog_open;
+    char        heading_dialog_item[FB_MAX_NAME];
+    char        heading_dialog_value[FB_MAX_NAME];
+    char        pending_heading_override[FB_MAX_NAME];
+    bool        pending_import;  // deferred import waiting for heading name
+
+    // Manage inline author editing
+    int         manage_editing_author;  // index being edited, -1 = none
+    char        manage_edit_buf[FB_MAX_NAME];
 
     // GUI state
     bool        should_close;

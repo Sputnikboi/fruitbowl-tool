@@ -11,6 +11,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
+#include <stdlib.h>
+#include <dirent.h>
 
 // ── Layout (base values, multiplied by gui_scale) ───────────────────────────
 #define PANEL_W_BASE 380
@@ -194,12 +196,97 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     DrawText("Minecraft Item", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
     Rectangle item_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), FIELD_H};
     static bool item_edit = false;
-    if (GuiTextBox(item_r, s->item_type, FB_MAX_NAME, item_edit)) item_edit = !item_edit;
-    cy += FIELD_H + PAD + 8;
+    static char prev_item_text[FB_MAX_NAME] = {0};
+
+    // Check for dropdown clicks FIRST, before GuiTextBox can steal the click
+    bool dropdown_clicked = false;
+    if (s->item_dropdown_open && s->item_suggestion_count > 0 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        // Build filtered list to check hit
+        char needle_pre[FB_MAX_NAME];
+        strncpy(needle_pre, s->item_type, sizeof(needle_pre) - 1); needle_pre[sizeof(needle_pre)-1] = '\0';
+        for (char *p = needle_pre; *p; p++) if (*p >= 'A' && *p <= 'Z') *p += 32;
+
+        int dd_y = cy + (int)FIELD_H;  // dropdown starts right below item field
+        int dd_max = 8, dd_count = 0;
+        int dd_indices_pre[FB_MAX_SUGGESTIONS];
+        for (int i = 0; i < s->item_suggestion_count && dd_count < dd_max; i++) {
+            if (!needle_pre[0] || strstr(s->item_suggestions[i], needle_pre))
+                dd_indices_pre[dd_count++] = i;
+        }
+        for (int di = 0; di < dd_count; di++) {
+            Rectangle dr = {(float)(x+PAD), (float)(dd_y + di * ROW_H), (float)(w-2*PAD), (float)ROW_H};
+            if (CheckCollisionPointRec(GetMousePosition(), dr)) {
+                strncpy(s->item_type, s->item_suggestions[dd_indices_pre[di]], FB_MAX_NAME - 1);
+                strncpy(prev_item_text, s->item_type, FB_MAX_NAME - 1);
+                s->item_dropdown_open = false;
+                item_edit = false;
+                dropdown_clicked = true;
+                break;
+            }
+        }
+    }
+
+    if (!dropdown_clicked) {
+        if (GuiTextBox(item_r, s->item_type, FB_MAX_NAME, item_edit)) {
+            item_edit = !item_edit;
+            if (item_edit && s->item_suggestion_count == 0 && s->pack_path[0]) {
+                s->item_suggestion_count = fb_scan_pack_items(
+                    s->pack_path, s->item_suggestions, FB_MAX_SUGGESTIONS);
+            }
+        }
+    }
+    // Toggle dropdown when editing and text changes
+    if (item_edit && strcmp(s->item_type, prev_item_text) != 0) {
+        s->item_dropdown_open = true;
+        s->item_dropdown_scroll = 0;
+    }
+    strncpy(prev_item_text, s->item_type, FB_MAX_NAME - 1);
+    if (!item_edit) s->item_dropdown_open = false;
+    cy += FIELD_H;
+
+    // Dropdown suggestions (drawn below the item field, overlapping other content)
+    if (s->item_dropdown_open && s->item_suggestion_count > 0) {
+        char needle[FB_MAX_NAME];
+        strncpy(needle, s->item_type, sizeof(needle) - 1); needle[sizeof(needle)-1] = '\0';
+        for (char *p = needle; *p; p++) if (*p >= 'A' && *p <= 'Z') *p += 32;
+
+        int dd_max = 8;
+        int dd_count = 0;
+        int dd_indices[FB_MAX_SUGGESTIONS];
+        for (int i = 0; i < s->item_suggestion_count && dd_count < dd_max; i++) {
+            if (!needle[0] || strstr(s->item_suggestions[i], needle))
+                dd_indices[dd_count++] = i;
+        }
+
+        if (dd_count > 0) {
+            int dd_h = dd_count * ROW_H;
+            DrawRectangle(x+PAD, cy, w-2*PAD, dd_h, (Color){25,25,28,245});
+            DrawRectangleLines(x+PAD, cy, w-2*PAD, dd_h, C_BORDER);
+            for (int di = 0; di < dd_count; di++) {
+                int dy = cy + di * ROW_H;
+                Rectangle dr = {(float)(x+PAD), (float)dy, (float)(w-2*PAD), (float)ROW_H};
+                bool dhov = CheckCollisionPointRec(GetMousePosition(), dr);
+                if (dhov) DrawRectangleRec(dr, C_ROW_HOVER);
+                DrawText(s->item_suggestions[dd_indices[di]], x+PAD+6,
+                         dy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, dhov ? RAYWHITE : C_TEXT);
+            }
+            cy += dd_h;
+        } else {
+            s->item_dropdown_open = false;
+        }
+    }
+    cy += PAD + 8;
 
     // Import button
     Rectangle btn_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), BTN_H};
-    if (GuiButton(btn_r, "Add to Pack")) {
+    bool do_import = GuiButton(btn_r, "Add to Pack");
+    // Also handle pending import (after heading dialog completes)
+    if (s->pending_import && !s->heading_dialog_open) {
+        do_import = true;
+        s->pending_import = false;
+    }
+
+    if (do_import) {
         fb_log_clear(&s->log);
         if (!s->pack_path[0]) {
             fb_log(&s->log, FB_LOG_ERROR, "Set a pack path first");
@@ -207,16 +294,57 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
             fb_log(&s->log, FB_LOG_ERROR, "Select a .bbmodel file first");
         } else if (!s->item_type[0]) {
             fb_log(&s->log, FB_LOG_ERROR, "Enter a Minecraft item type");
+        } else if (fb_needs_heading_name(s->item_type, s->custom_headings, s->custom_heading_count)
+                   && !s->pending_heading_override[0]) {
+            // Need to ask for heading name first
+            s->heading_dialog_open = true;
+            strncpy(s->heading_dialog_item, s->item_type, FB_MAX_NAME - 1);
+            s->heading_dialog_value[0] = '\0';
+            s->pending_import = true;
         } else {
             const char *name = s->model_name[0] ? s->model_name : NULL;
+            const char *heading = s->pending_heading_override[0] ? s->pending_heading_override : NULL;
+            if (!heading) heading = fb_custom_heading_for(s->item_type, s->custom_headings, s->custom_heading_count);
             fb_add_to_pack(s->bbmodel_path, s->pack_path, s->item_type,
-                           name, s->author, &s->log);
+                           name, s->author, heading, &s->log);
+            s->pending_heading_override[0] = '\0';
             // Auto-rescan
             s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
             s->pack_scanned = true;
+            // Refresh item suggestions
+            s->item_suggestion_count = fb_scan_pack_items(
+                s->pack_path, s->item_suggestions, FB_MAX_SUGGESTIONS);
         }
     }
     cy += BTN_H + PAD;
+
+    // ── Zip Pack section ────────────────────────────────────────────────
+    DrawLine(x + PAD, cy, x + w - PAD, cy, C_BORDER); cy += PAD;
+    static char zip_name[FB_MAX_NAME] = "VXX - Fruitbowl 4";
+    DrawText("Zip Name", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
+    int zip_btn_w = 80;
+    Rectangle zip_name_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD-zip_btn_w-PAD), FIELD_H};
+    static bool zip_name_edit = false;
+    if (GuiTextBox(zip_name_r, zip_name, FB_MAX_NAME, zip_name_edit)) zip_name_edit = !zip_name_edit;
+    Rectangle zip_btn_r = {(float)(x+w-PAD-zip_btn_w), (float)cy, (float)zip_btn_w, FIELD_H};
+    if (GuiButton(zip_btn_r, "Zip Pack")) {
+        fb_log_clear(&s->log);
+        if (!s->pack_path[0]) {
+            fb_log(&s->log, FB_LOG_ERROR, "Set a pack path first");
+        } else {
+            char out_path[FB_MAX_PATH];
+            // Put the zip next to the pack folder
+            char parent[FB_MAX_PATH];
+            strncpy(parent, s->pack_path, sizeof(parent) - 1);
+            parent[sizeof(parent)-1] = '\0';
+            char *sl = strrchr(parent, '/');
+            if (sl) *sl = '\0';
+            snprintf(out_path, sizeof(out_path), "%s/%s.zip",
+                     parent, zip_name[0] ? zip_name : "pack");
+            fb_zip_pack(s->pack_path, out_path, &s->log);
+        }
+    }
+    cy += FIELD_H + PAD;
 
     // Log
     DrawText("Output", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
@@ -233,16 +361,39 @@ static char prev_filter[FB_MAX_NAME] = {0};
 static bool entry_matches_filter(const FBPackEntry *e, const char *filter) {
     if (!filter[0]) return true;
     if (strcmp(filter, "noauthor") == 0) return e->author[0] == '\0';
-    // Case-insensitive substring search
+    // Case-insensitive substring search (includes real_item_type)
     char haystack[512];
-    snprintf(haystack, sizeof(haystack), "%s %s %s %s",
-             e->item_type, e->model_name, e->author, e->display_name);
-    // Lowercase both
+    snprintf(haystack, sizeof(haystack), "%s %s %s %s %s",
+             e->item_type, e->real_item_type, e->model_name, e->author, e->display_name);
     for (char *p = haystack; *p; p++) if (*p >= 'A' && *p <= 'Z') *p += 32;
     char needle[FB_MAX_NAME];
     strncpy(needle, filter, sizeof(needle)-1); needle[sizeof(needle)-1] = '\0';
     for (char *p = needle; *p; p++) if (*p >= 'A' && *p <= 'Z') *p += 32;
     return strstr(haystack, needle) != NULL;
+}
+
+// ── Sorting comparators ─────────────────────────────────────────────────────
+static int sort_col_g = 0;
+static bool sort_asc_g = true;
+static FBPackEntry *sort_entries_g = NULL;
+
+static int compare_entries(const void *a, const void *b) {
+    int ia = *(const int *)a, ib = *(const int *)b;
+    const FBPackEntry *ea = &sort_entries_g[ia];
+    const FBPackEntry *eb = &sort_entries_g[ib];
+    int cmp = 0;
+    switch (sort_col_g) {
+        case 0: cmp = strcmp(ea->item_type, eb->item_type); break;
+        case 1: cmp = strcmp(ea->model_name, eb->model_name); break;
+        case 2: cmp = ea->threshold - eb->threshold; break;
+        case 3: cmp = strcmp(ea->author, eb->author); break;
+        case 4: {
+            bool a_ok = ea->has_texture && ea->has_model && ea->has_item_def;
+            bool b_ok = eb->has_texture && eb->has_model && eb->has_item_def;
+            cmp = (int)a_ok - (int)b_ok;
+        } break;
+    }
+    return sort_asc_g ? cmp : -cmp;
 }
 
 static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
@@ -296,13 +447,28 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
     int col_name = remaining * 40 / 100;
     int col_author = remaining - col_type - col_name;
 
+    // Sortable column headers
     DrawRectangle(list_x, cy, list_w, ROW_H, C_BORDER);
     int cx = list_x + 4;
-    DrawText("Type", cx, cy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, RAYWHITE); cx += col_type;
-    DrawText("Model", cx, cy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, RAYWHITE); cx += col_name;
-    DrawText("#", cx, cy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, RAYWHITE); cx += col_num;
-    DrawText("Author", cx, cy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, RAYWHITE); cx += col_author;
-    DrawText("OK", cx, cy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, RAYWHITE);
+    struct { const char *label; int width; int col_id; } hdrs[] = {
+        {"Type", col_type, 0}, {"Model", col_name, 1}, {"#", col_num, 2},
+        {"Author", col_author, 3}, {"OK", col_status, 4},
+    };
+    for (int hi = 0; hi < 5; hi++) {
+        Rectangle hr = {(float)cx, (float)cy, (float)hdrs[hi].width, (float)ROW_H};
+        bool hov = CheckCollisionPointRec(GetMousePosition(), hr);
+        const char *sort_ind = "";
+        if (s->manage_sort_col == hdrs[hi].col_id)
+            sort_ind = s->manage_sort_asc ? " ^" : " v";
+        Color hc = hov ? RAYWHITE : (Color){180,180,180,255};
+        DrawText(TextFormat("%s%s", hdrs[hi].label, sort_ind), cx, cy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, hc);
+        if (hov && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (s->manage_sort_col == hdrs[hi].col_id)
+                s->manage_sort_asc = !s->manage_sort_asc;
+            else { s->manage_sort_col = hdrs[hi].col_id; s->manage_sort_asc = true; }
+        }
+        cx += hdrs[hi].width;
+    }
     cy += ROW_H;
 
     // Scrollable model list
@@ -325,6 +491,13 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
         if (entry_matches_filter(&s->pack_entries[i], s->manage_filter))
             filtered_indices[filtered_count++] = i;
     }
+
+    // Sort filtered entries by selected column
+    sort_col_g = s->manage_sort_col;
+    sort_asc_g = s->manage_sort_asc;
+    sort_entries_g = s->pack_entries;
+    if (filtered_count > 1)
+        qsort(filtered_indices, filtered_count, sizeof(int), compare_entries);
 
     // Scroll with mouse wheel when hovering list
     if (CheckCollisionPointRec(GetMousePosition(), list_area)) {
@@ -349,8 +522,22 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
         else if (hovered) DrawRectangle(list_x, ry, list_w, ROW_H, C_ROW_HOVER);
         else if (fi % 2) DrawRectangle(list_x, ry, list_w, ROW_H, C_ROW_ALT);
 
-        // Click to select
+        // Click to select; double-click on author column for inline editing
         if (hovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            // Check if double-click on author column
+            float author_x = (float)(list_x + 4 + col_type + col_name + col_num);
+            float mx = GetMousePosition().x;
+            static double last_click_time = 0;
+            static int last_click_idx = -1;
+            double now = GetTime();
+            if (i == last_click_idx && (now - last_click_time) < 0.35 &&
+                mx >= author_x && mx < author_x + col_author) {
+                // Start inline editing
+                s->manage_editing_author = i;
+                strncpy(s->manage_edit_buf, e->author, FB_MAX_NAME - 1);
+            }
+            last_click_time = now;
+            last_click_idx = i;
             s->manage_selected = i;
         }
 
@@ -363,7 +550,23 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
         DrawText(e->item_type, cx, ty, FONT_SMALL, text_c); cx += col_type;
         DrawText(e->model_name, cx, ty, FONT_SMALL, text_c); cx += col_name;
         DrawText(TextFormat("%d", e->threshold), cx, ty, FONT_SMALL, text_c); cx += col_num;
-        DrawText(e->author[0] ? e->author : "-", cx, ty, FONT_SMALL, e->author[0] ? text_c : C_DIM); cx += col_author;
+
+        // Author column — inline editing or display
+        if (s->manage_editing_author == i) {
+            Rectangle edit_r = {(float)cx, (float)ry, (float)(col_author - 4), (float)ROW_H};
+            if (GuiTextBox(edit_r, s->manage_edit_buf, FB_MAX_NAME, true)) {
+                // Editing finished (Enter or click away)
+                strncpy(e->author, s->manage_edit_buf, FB_MAX_NAME - 1);
+                fb_update_author(s->pack_path, e->real_item_type, e->threshold,
+                                 e->display_name, s->manage_edit_buf, &s->log);
+                s->manage_editing_author = -1;
+            }
+            // Cancel on Escape
+            if (IsKeyPressed(KEY_ESCAPE)) s->manage_editing_author = -1;
+        } else {
+            DrawText(e->author[0] ? e->author : "-", cx, ty, FONT_SMALL, e->author[0] ? text_c : C_DIM);
+        }
+        cx += col_author;
         DrawText(all_ok ? "OK" : "!!", cx, ty, FONT_SMALL, all_ok ? C_GREEN : C_RED);
 
         row_count++;
@@ -381,18 +584,21 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
     int btn_w = (list_w - 3 * PAD) / 4;
     float by = (float)cy;
 
+    int btn_count = 5;
+    btn_w = (list_w - (btn_count - 1) * PAD) / btn_count;
+
     if (GuiButton((Rectangle){(float)list_x, by, (float)btn_w, BTN_H}, "Delete")) {
         if (s->manage_selected >= 0 && s->manage_selected < s->pack_entry_count) {
             FBPackEntry *e = &s->pack_entries[s->manage_selected];
             fb_log_clear(&s->log);
             fb_log(&s->log, FB_LOG_HEADER, "Deleting %s...", e->model_name);
-            fb_delete_model(s->pack_path, e->item_type, e->model_name, e->threshold, &s->log);
+            fb_delete_model(s->pack_path, e->real_item_type, e->model_name, e->threshold, &s->log);
             s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
             s->manage_selected = -1;
         }
     }
 
-    if (GuiButton((Rectangle){(float)(list_x + btn_w + PAD), by, (float)btn_w, BTN_H}, "Preview")) {
+    if (GuiButton((Rectangle){(float)(list_x + (btn_w + PAD)), by, (float)btn_w, BTN_H}, "Preview")) {
         if (s->manage_selected >= 0 && s->pack_path[0]) {
             FBPackEntry *e = &s->pack_entries[s->manage_selected];
             if (s->preview_loaded) fb_unload_model_textures(&s->preview_model);
@@ -414,7 +620,6 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
         if (s->manage_selected >= 0) {
             FBPackEntry *e = &s->pack_entries[s->manage_selected];
             fb_log_clear(&s->log);
-            // For now, duplicate to item_type field
             if (s->item_type[0]) {
                 fb_duplicate_to_item(s->pack_path, e->model_name, s->item_type, e->author, &s->log);
                 s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
@@ -428,10 +633,23 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
         if (s->manage_selected >= 0) {
             FBPackEntry *e = &s->pack_entries[s->manage_selected];
             fb_log_clear(&s->log);
-            fb_update_author(s->pack_path, e->item_type, e->threshold,
+            fb_update_author(s->pack_path, e->real_item_type, e->threshold,
                              e->display_name, s->author, &s->log);
-            // Update local data
             strncpy(e->author, s->author, FB_MAX_NAME - 1);
+        }
+    }
+
+    if (GuiButton((Rectangle){(float)(list_x + 4*(btn_w+PAD)), by, (float)btn_w, BTN_H}, "Update")) {
+        if (s->manage_selected >= 0) {
+            FBPackEntry *e = &s->pack_entries[s->manage_selected];
+            char tmp[FB_MAX_PATH];
+            if (fb_pick_bbmodel(tmp, sizeof(tmp))) {
+                fb_log_clear(&s->log);
+                fb_log(&s->log, FB_LOG_HEADER, "Updating %s...", e->model_name);
+                fb_add_to_pack(tmp, s->pack_path, e->real_item_type,
+                               e->model_name, e->author, NULL, &s->log);
+                s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
+            }
         }
     }
     cy += BTN_H + PAD;
@@ -502,6 +720,271 @@ static void draw_preview_viewport(FBAppState *s, int x, int y, int w, int h) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// TAB: Batch Import
+// ═════════════════════════════════════════════════════════════════════════════
+
+static float batch_scroll = 0;
+static int batch_editing_author = -1;
+static char batch_edit_buf[FB_MAX_NAME] = {0};
+
+static void draw_batch_tab(FBAppState *s, int x, int y, int w, int h) {
+    int cy = y + PAD;
+
+    // Pack path (shared with import tab)
+    int browse_w = 60;
+    DrawText("Resource Pack Folder", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
+    Rectangle pack_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD-browse_w-PAD), FIELD_H};
+    static bool bp_edit = false;
+    if (GuiTextBox(pack_r, s->pack_path, FB_MAX_PATH, bp_edit)) bp_edit = !bp_edit;
+    Rectangle bpb = {(float)(x+w-PAD-browse_w), (float)cy, (float)browse_w, FIELD_H};
+    if (GuiButton(bpb, "Browse")) {
+        char tmp[FB_MAX_PATH];
+        if (fb_pick_folder(tmp, sizeof(tmp))) {
+            strncpy(s->pack_path, tmp, FB_MAX_PATH - 1);
+        }
+    }
+    cy += FIELD_H + PAD;
+
+    // Item type for batch
+    DrawText("Minecraft Item (for all files)", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
+    Rectangle bit_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), FIELD_H};
+    static bool bit_edit = false;
+    if (GuiTextBox(bit_r, s->item_type, FB_MAX_NAME, bit_edit)) bit_edit = !bit_edit;
+    cy += FIELD_H + PAD;
+
+    // Button row: Add Files, Add Folder, Remove, Clear, Set Author
+    int bbtn_count = 5;
+    int bbtn_w = (w - 2*PAD - (bbtn_count-1)*PAD) / bbtn_count;
+    float bby = (float)cy;
+
+    if (GuiButton((Rectangle){(float)(x+PAD), bby, (float)bbtn_w, BTN_H}, "Add Files")) {
+        char tmp[FB_MAX_PATH];
+        if (fb_pick_bbmodel(tmp, sizeof(tmp))) {
+            if (s->batch_count < FB_MAX_BATCH) {
+                FBBatchEntry *be = &s->batch_entries[s->batch_count];
+                strncpy(be->path, tmp, FB_MAX_PATH - 1);
+                strncpy(be->author, s->author, FB_MAX_NAME - 1);
+                fb_sanitize_name(tmp, be->display_name, FB_MAX_NAME);
+                s->batch_count++;
+            }
+        }
+    }
+
+    if (GuiButton((Rectangle){(float)(x+PAD+bbtn_w+PAD), bby, (float)bbtn_w, BTN_H}, "Add Folder")) {
+        char folder[FB_MAX_PATH];
+        if (fb_pick_folder(folder, sizeof(folder))) {
+            // Scan folder for .bbmodel files
+            DIR *d = opendir(folder);
+            if (d) {
+                struct dirent *ent;
+                while ((ent = readdir(d)) && s->batch_count < FB_MAX_BATCH) {
+                    int len = (int)strlen(ent->d_name);
+                    if (len > 8 && strcmp(ent->d_name + len - 8, ".bbmodel") == 0) {
+                        FBBatchEntry *be = &s->batch_entries[s->batch_count];
+                        snprintf(be->path, FB_MAX_PATH, "%s/%s", folder, ent->d_name);
+                        strncpy(be->author, s->author, FB_MAX_NAME - 1);
+                        fb_sanitize_name(ent->d_name, be->display_name, FB_MAX_NAME);
+                        s->batch_count++;
+                    }
+                }
+                closedir(d);
+            }
+        }
+    }
+
+    if (GuiButton((Rectangle){(float)(x+PAD+2*(bbtn_w+PAD)), bby, (float)bbtn_w, BTN_H}, "Remove")) {
+        if (s->batch_selected >= 0 && s->batch_selected < s->batch_count) {
+            memmove(&s->batch_entries[s->batch_selected],
+                    &s->batch_entries[s->batch_selected + 1],
+                    sizeof(FBBatchEntry) * (s->batch_count - s->batch_selected - 1));
+            s->batch_count--;
+            if (s->batch_selected >= s->batch_count) s->batch_selected = s->batch_count - 1;
+        }
+    }
+
+    if (GuiButton((Rectangle){(float)(x+PAD+3*(bbtn_w+PAD)), bby, (float)bbtn_w, BTN_H}, "Clear")) {
+        s->batch_count = 0;
+        s->batch_selected = -1;
+    }
+
+    if (GuiButton((Rectangle){(float)(x+PAD+4*(bbtn_w+PAD)), bby, (float)bbtn_w, BTN_H}, "Set Author")) {
+        // Set author on selected entry (or all if none selected)
+        if (s->batch_selected >= 0 && s->batch_selected < s->batch_count) {
+            strncpy(s->batch_entries[s->batch_selected].author, s->author, FB_MAX_NAME - 1);
+        } else {
+            for (int i = 0; i < s->batch_count; i++)
+                strncpy(s->batch_entries[i].author, s->author, FB_MAX_NAME - 1);
+        }
+    }
+    cy += BTN_H + PAD;
+
+    // Batch list header
+    int list_x = x + PAD;
+    int list_w = w - 2*PAD;
+    int col_file = list_w * 65 / 100;
+    int col_auth = list_w - col_file;
+
+    DrawRectangle(list_x, cy, list_w, ROW_H, C_BORDER);
+    DrawText("File", list_x + 4, cy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, RAYWHITE);
+    DrawText("Author", list_x + 4 + col_file, cy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, RAYWHITE);
+    cy += ROW_H;
+
+    // Scrollable batch list
+    int reserve = BTN_H + 14 + 80 + 4*PAD;
+    int list_h = h - (cy - y) - reserve;
+    if (list_h < 60) list_h = 60;
+    Rectangle blist_area = {(float)list_x, (float)cy, (float)list_w, (float)list_h};
+
+    if (CheckCollisionPointRec(GetMousePosition(), blist_area)) {
+        batch_scroll -= GetMouseWheelMove() * 3;
+        if (batch_scroll < 0) batch_scroll = 0;
+        int visible = list_h / ROW_H;
+        float max_s = (float)(s->batch_count - visible);
+        if (max_s < 0) max_s = 0;
+        if (batch_scroll > max_s) batch_scroll = max_s;
+    }
+
+    BeginScissorMode(list_x, cy, list_w, list_h);
+    int visible_rows = list_h / ROW_H;
+    int scroll_off = (int)batch_scroll;
+    int drawn = 0;
+
+    for (int i = scroll_off; i < s->batch_count && drawn < visible_rows + 1; i++) {
+        FBBatchEntry *be = &s->batch_entries[i];
+        int ry = cy + drawn * ROW_H;
+        bool sel = (s->batch_selected == i);
+        bool hov = CheckCollisionPointRec(GetMousePosition(),
+                    (Rectangle){(float)list_x, (float)ry, (float)list_w, ROW_H});
+
+        if (sel) DrawRectangle(list_x, ry, list_w, ROW_H, C_HIGHLIGHT);
+        else if (hov) DrawRectangle(list_x, ry, list_w, ROW_H, C_ROW_HOVER);
+        else if (i % 2) DrawRectangle(list_x, ry, list_w, ROW_H, C_ROW_ALT);
+
+        if (hov && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            // Double-click on author column to edit
+            float auth_x = (float)(list_x + 4 + col_file);
+            static double b_last_click = 0;
+            static int b_last_idx = -1;
+            double now = GetTime();
+            if (i == b_last_idx && (now - b_last_click) < 0.35 &&
+                GetMousePosition().x >= auth_x) {
+                batch_editing_author = i;
+                strncpy(batch_edit_buf, be->author, FB_MAX_NAME - 1);
+            }
+            b_last_click = now;
+            b_last_idx = i;
+            s->batch_selected = i;
+        }
+
+        int ty = ry + ROW_H/2 - FONT_SMALL/2;
+        DrawText(be->display_name, list_x + 4, ty, FONT_SMALL, C_TEXT);
+
+        if (batch_editing_author == i) {
+            Rectangle er = {(float)(list_x + 4 + col_file), (float)ry, (float)(col_auth - 4), (float)ROW_H};
+            if (GuiTextBox(er, batch_edit_buf, FB_MAX_NAME, true)) {
+                strncpy(be->author, batch_edit_buf, FB_MAX_NAME - 1);
+                batch_editing_author = -1;
+            }
+            if (IsKeyPressed(KEY_ESCAPE)) batch_editing_author = -1;
+        } else {
+            DrawText(be->author[0] ? be->author : "-", list_x + 4 + col_file, ty, FONT_SMALL,
+                     be->author[0] ? C_TEXT : C_DIM);
+        }
+        drawn++;
+    }
+    EndScissorMode();
+    cy += list_h;
+
+    // Count
+    DrawText(TextFormat("%d files", s->batch_count), list_x, cy + 2, 10, C_DIM);
+    cy += 16;
+
+    // Import All button
+    Rectangle import_all = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), BTN_H};
+    if (GuiButton(import_all, "Import All to Pack")) {
+        fb_log_clear(&s->log);
+        if (!s->pack_path[0]) {
+            fb_log(&s->log, FB_LOG_ERROR, "Set a pack path first");
+        } else if (!s->item_type[0]) {
+            fb_log(&s->log, FB_LOG_ERROR, "Enter a Minecraft item type");
+        } else if (s->batch_count == 0) {
+            fb_log(&s->log, FB_LOG_WARN, "No files to import");
+        } else {
+            for (int i = 0; i < s->batch_count; i++) {
+                FBBatchEntry *be = &s->batch_entries[i];
+                fb_log(&s->log, FB_LOG_HEADER, "Importing %s...", be->display_name);
+                const char *heading = fb_custom_heading_for(s->item_type, s->custom_headings, s->custom_heading_count);
+                fb_add_to_pack(be->path, s->pack_path, s->item_type,
+                               be->display_name, be->author, heading, &s->log);
+            }
+            fb_log(&s->log, FB_LOG_SUCCESS, "Batch import complete (%d files)", s->batch_count);
+            s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
+            s->pack_scanned = true;
+        }
+    }
+    cy += BTN_H + PAD;
+
+    // Log
+    DrawText("Output", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
+    draw_log(&s->log, x + PAD, cy, w - 2*PAD, h - (cy - y) - PAD);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Heading Name Dialog (modal overlay)
+// ═════════════════════════════════════════════════════════════════════════════
+
+static bool heading_dlg_edit = false;
+
+static void draw_heading_dialog(FBAppState *s, int panel_w) {
+    // Dim background
+    int sw = GetScreenWidth(), sh = GetScreenHeight();
+    DrawRectangle(0, 0, sw, sh, (Color){0,0,0,150});
+
+    // Dialog box
+    int dw = (int)(350 * gui_scale), dh = (int)(160 * gui_scale);
+    int dx = (panel_w - dw) / 2, dy = (sh - dh) / 2;
+    DrawRectangle(dx, dy, dw, dh, C_PANEL);
+    DrawRectangleLines(dx, dy, dw, dh, C_BORDER);
+
+    int cy = dy + PAD;
+    DrawText("Heading Name", dx + PAD, cy, FONT_TITLE, RAYWHITE); cy += FONT_TITLE + 8;
+    DrawText(TextFormat("Enter a display heading for '%s'", s->heading_dialog_item),
+             dx + PAD, cy, FONT_SMALL, C_DIM); cy += FONT_SMALL + 4;
+    DrawText("(used in model list.txt)", dx + PAD, cy, FONT_SMALL, C_DIM); cy += FONT_SMALL + PAD;
+
+    Rectangle edit_r = {(float)(dx+PAD), (float)cy, (float)(dw-2*PAD), FIELD_H};
+    if (GuiTextBox(edit_r, s->heading_dialog_value, FB_MAX_NAME, heading_dlg_edit))
+        heading_dlg_edit = !heading_dlg_edit;
+    cy += FIELD_H + PAD;
+
+    int btn_w2 = (dw - 3*PAD) / 2;
+    if (GuiButton((Rectangle){(float)(dx+PAD), (float)cy, (float)btn_w2, BTN_H}, "OK")) {
+        if (s->heading_dialog_value[0]) {
+            // Save the custom heading
+            strncpy(s->pending_heading_override, s->heading_dialog_value, FB_MAX_NAME - 1);
+            if (s->custom_heading_count < FB_MAX_HEADINGS) {
+                FBCustomHeading *ch = &s->custom_headings[s->custom_heading_count++];
+                strncpy(ch->item_id, s->heading_dialog_item, FB_MAX_NAME - 1);
+                strncpy(ch->heading, s->heading_dialog_value, FB_MAX_NAME - 1);
+                fb_save_settings(s);
+            }
+            s->heading_dialog_open = false;
+            heading_dlg_edit = false;
+        }
+    }
+    if (GuiButton((Rectangle){(float)(dx+2*PAD+btn_w2), (float)cy, (float)btn_w2, BTN_H}, "Cancel")) {
+        s->heading_dialog_open = false;
+        s->pending_import = false;
+        heading_dlg_edit = false;
+    }
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        s->heading_dialog_open = false;
+        s->pending_import = false;
+        heading_dlg_edit = false;
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Main GUI
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -563,8 +1046,8 @@ void fb_draw_gui(FBAppState *s) {
 
     // ── Tab bar ─────────────────────────────────────────────────────────
     if (!preview_collapsed) {
-        const char *tab_names[] = {"Import", "Manage", "Preview"};
-        int tab_count = 3;
+        const char *tab_names[] = {"Import", "Batch", "Manage", "Preview"};
+        int tab_count = 4;
         int tab_w = panel_w / tab_count;
 
         for (int i = 0; i < tab_count; i++) {
@@ -587,6 +1070,7 @@ void fb_draw_gui(FBAppState *s) {
     int panel_y = preview_collapsed ? 0 : TAB_H;
     int panel_h = sh - panel_y;
 
+    bool just_expanded = false;
     if (preview_collapsed) {
         // Draw thin collapsed strip — entire strip is clickable to expand
         Rectangle strip_r = {0, 0, (float)collapse_btn_w, (float)sh};
@@ -598,6 +1082,7 @@ void fb_draw_gui(FBAppState *s) {
         DrawText(arrow, (collapse_btn_w - aw)/2, sh/2 - FONT_NORMAL/2, FONT_NORMAL, hover ? RAYWHITE : C_DIM);
         if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             sidebar_collapsed = false;
+            just_expanded = true;
         }
     } else {
         DrawRectangle(0, panel_y, panel_w, panel_h, C_PANEL);
@@ -606,12 +1091,20 @@ void fb_draw_gui(FBAppState *s) {
             case TAB_IMPORT:
                 draw_import_tab(s, 0, panel_y, panel_w, panel_h);
                 break;
+            case TAB_BATCH:
+                draw_batch_tab(s, 0, panel_y, panel_w, panel_h);
+                break;
             case TAB_MANAGE:
                 draw_manage_tab(s, 0, panel_y, panel_w, panel_h);
                 break;
             case TAB_PREVIEW:
                 draw_preview_sidebar(s, 0, panel_y, panel_w, panel_h);
                 break;
+        }
+
+        // Heading name dialog (drawn on top)
+        if (s->heading_dialog_open) {
+            draw_heading_dialog(s, panel_w);
         }
     }
 
@@ -626,7 +1119,7 @@ void fb_draw_gui(FBAppState *s) {
     }
 
     // Collapse button (drawn on top of the border, visible when sidebar is open in preview tab)
-    if (s->active_tab == TAB_PREVIEW && !sidebar_collapsed) {
+    if (s->active_tab == TAB_PREVIEW && !sidebar_collapsed && !just_expanded) {
         Rectangle col_r = {(float)(vp_x - collapse_btn_w), (float)(sh/2 - BTN_H/2), (float)collapse_btn_w, (float)BTN_H};
         bool col_hover = CheckCollisionPointRec(GetMousePosition(), col_r);
         DrawRectangleRec(col_r, col_hover ? C_ROW_HOVER : C_PANEL2);

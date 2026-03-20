@@ -187,6 +187,13 @@ bool fb_parse_bbmodel(const char *path, FBModel *out) {
                 cJSON *frot = cJSON_GetObjectItem(face, "rotation");
                 if (frot && cJSON_IsNumber(frot))
                     f->rotation = frot->valueint;
+
+                cJSON *tint = cJSON_GetObjectItem(face, "tint_index");
+                if (!tint) tint = cJSON_GetObjectItem(face, "tintindex");
+                if (tint && cJSON_IsNumber(tint)) {
+                    f->tintindex = tint->valueint;
+                    f->has_tintindex = true;
+                }
             }
         }
 
@@ -198,6 +205,18 @@ bool fb_parse_bbmodel(const char *path, FBModel *out) {
         ei++;
     }
     out->element_count = ei;
+
+    // Groups (preserve raw JSON for export)
+    cJSON *groups = cJSON_GetObjectItem(root, "outliner");
+    if (!groups) groups = cJSON_GetObjectItem(root, "groups");
+    if (groups) {
+        char *groups_str = cJSON_PrintUnformatted(groups);
+        if (groups_str) {
+            strncpy(out->groups_json, groups_str, sizeof(out->groups_json) - 1);
+            out->has_groups = true;
+            free(groups_str);
+        }
+    }
 
     // Bounds shift (-16 to 32)
     float mins[3] = {999, 999, 999};
@@ -440,6 +459,12 @@ bool fb_load_pack_model(const char *pack_root, const char *model_name, FBModel *
                 cJSON *frot = cJSON_GetObjectItem(face, "rotation");
                 if (frot && cJSON_IsNumber(frot))
                     f->rotation = frot->valueint;
+
+                cJSON *tint = cJSON_GetObjectItem(face, "tintindex");
+                if (tint && cJSON_IsNumber(tint)) {
+                    f->tintindex = tint->valueint;
+                    f->has_tintindex = true;
+                }
             }
         }
 

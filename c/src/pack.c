@@ -2,10 +2,12 @@
 #include "model.h"
 #include "util.h"
 #include "cJSON.h"
+#include "miniz.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
+#include <sys/stat.h>
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Constants / Lookups
@@ -201,6 +203,31 @@ void fb_ensure_atlas(const char *pack_root, FBLog *log) {
     }
 
     cJSON_Delete(atlas);
+
+    // Also clean items.json: remove item/ from items atlas to prevent
+    // "Multiple atlases" errors
+    char items_atlas_path[FB_MAX_PATH];
+    fb_path_join(items_atlas_path, sizeof(items_atlas_path), pack_root, MC_ATLAS_DIR "/items.json");
+    if (fb_file_exists(items_atlas_path)) {
+        cJSON *items_atlas = load_json_file(items_atlas_path);
+        if (items_atlas) {
+            cJSON *isources = cJSON_GetObjectItem(items_atlas, "sources");
+            if (isources) {
+                int size = cJSON_GetArraySize(isources);
+                for (int i = size - 1; i >= 0; i--) {
+                    cJSON *isrc = cJSON_GetArrayItem(isources, i);
+                    cJSON *s = cJSON_GetObjectItem(isrc, "source");
+                    if (s && cJSON_IsString(s) && strcmp(s->valuestring, "item") == 0) {
+                        cJSON_DeleteItemFromArray(isources, i);
+                        save_json_file(items_atlas_path, items_atlas);
+                        fb_log(log, FB_LOG_SUCCESS, "Cleaned items atlas — removed item/ source");
+                        break;
+                    }
+                }
+            }
+            cJSON_Delete(items_atlas);
+        }
+    }
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -384,14 +411,16 @@ static int count_dispatch_refs(const char *pack_root, const char *model_name,
 
 static void update_model_list(const char *pack_root, const char *mc_item_id,
                               const char *model_name, int threshold,
-                              const char *author, FBLog *log) {
+                              const char *author, const char *heading_override,
+                              FBLog *log) {
     char path[FB_MAX_PATH];
     fb_path_join(path, sizeof(path), pack_root, FB_MODEL_LIST);
 
     char display[FB_MAX_NAME];
     fb_display_name(model_name, display, sizeof(display));
 
-    const char *heading = fb_heading_for_item(mc_item_id);
+    const char *heading = heading_override;
+    if (!heading || !heading[0]) heading = fb_heading_for_item(mc_item_id);
     char heading_buf[FB_MAX_NAME];
     if (!heading) {
         // Title-case the item id
@@ -589,7 +618,8 @@ void fb_sync_helmets(const char *pack_root, FBLog *log) {
 
 bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
                     const char *mc_item_id, const char *model_name,
-                    const char *author, FBLog *log) {
+                    const char *author, const char *heading_override,
+                    FBLog *log) {
     // Parse bbmodel
     int file_len;
     char *json_str = fb_read_file(bbmodel_path, &file_len);
@@ -724,6 +754,7 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
             cJSON_AddItemToObject(fj, "uv", uv);
             cJSON_AddStringToObject(fj, "texture", TextFormat("#%d", f->texture_idx));
             if (f->rotation) cJSON_AddNumberToObject(fj, "rotation", f->rotation);
+            if (f->has_tintindex) cJSON_AddNumberToObject(fj, "tintindex", f->tintindex);
             cJSON_AddItemToObject(faces_obj, face_names[fi], fj);
         }
 
@@ -737,6 +768,17 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
         cJSON_AddItemToObject(out, "display", cJSON_Duplicate(bb_display, 1));
     }
 
+    // Groups (preserve from bbmodel)
+    if (model.has_groups && model.groups_json[0]) {
+        cJSON *groups_parsed = cJSON_Parse(model.groups_json);
+        if (groups_parsed) {
+            cJSON_AddItemToObject(out, "groups", groups_parsed);
+        }
+    }
+
+    // Check if model already exists (warn but don't block)
+    fb_check_existing(pack_root, name, log);
+
     char model_path[FB_MAX_PATH];
     snprintf(model_path, sizeof(model_path), "%s/%s/%s.json", pack_root, FB_MODEL_DIR, name);
     char model_dir[FB_MAX_PATH];
@@ -745,6 +787,52 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
     save_json_file(model_path, out);
     fb_log(log, FB_LOG_SUCCESS, "Model -> %s.json", name);
     cJSON_Delete(out);
+
+    // 2b — Trident throwing variant
+    if (strcmp(mc_item_id, "trident") == 0 && bb_display) {
+        cJSON *throw_out = cJSON_CreateObject();
+        cJSON_AddStringToObject(throw_out, "credit", "Made with Blockbench");
+        // Copy texture_size, textures, elements from saved model
+        char saved_model_path[FB_MAX_PATH];
+        snprintf(saved_model_path, sizeof(saved_model_path), "%s/%s/%s.json",
+                 pack_root, FB_MODEL_DIR, name);
+        cJSON *saved = load_json_file(saved_model_path);
+        if (saved) {
+            // Copy everything from saved
+            cJSON *child = saved->child;
+            while (child) {
+                if (strcmp(child->string, "display") != 0) {
+                    cJSON_AddItemToObject(throw_out, child->string,
+                                          cJSON_Duplicate(child, 1));
+                }
+                child = child->next;
+            }
+            // Build flipped display (180° rotation on Y for throwing)
+            cJSON *throw_display = cJSON_Duplicate(bb_display, 1);
+            // Flip thirdperson_right: add 180 to Y rotation
+            const char *throw_views[] = {"thirdperson_right", "thirdperson_left",
+                                         "firstperson_right", "firstperson_left", NULL};
+            for (const char **v = throw_views; *v; v++) {
+                cJSON *view = cJSON_GetObjectItem(throw_display, *v);
+                if (view) {
+                    cJSON *rot = cJSON_GetObjectItem(view, "rotation");
+                    if (rot && cJSON_GetArraySize(rot) >= 3) {
+                        cJSON *ry = cJSON_GetArrayItem(rot, 1);
+                        if (ry) cJSON_SetNumberValue(ry, ry->valuedouble + 180.0);
+                    }
+                }
+            }
+            cJSON_AddItemToObject(throw_out, "display", throw_display);
+
+            char throw_path[FB_MAX_PATH];
+            snprintf(throw_path, sizeof(throw_path), "%s/%s/%s_throwing.json",
+                     pack_root, FB_MODEL_DIR, name);
+            save_json_file(throw_path, throw_out);
+            fb_log(log, FB_LOG_SUCCESS, "Model -> %s_throwing.json", name);
+            cJSON_Delete(saved);
+        }
+        cJSON_Delete(throw_out);
+    }
 
     // 3 — Fruitbowl item def
     cJSON *item_def = cJSON_CreateObject();
@@ -770,7 +858,8 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
         fb_log(log, FB_LOG_SUCCESS, "Registered in %s.json -> threshold %d", mc_item_id, threshold);
 
     // 5 — Model list
-    update_model_list(pack_root, mc_item_id, name, threshold, author, log);
+    update_model_list(pack_root, mc_item_id, name, threshold, author,
+                      heading_override, log);
 
     // 6 — Sync helmets
     if (strcmp(mc_item_id, "stone_button") == 0)
@@ -916,6 +1005,9 @@ int fb_scan_pack(const char *pack_root, FBPackEntry *entries, int max_entries) {
             FBPackEntry *pe = &entries[count];
             memset(pe, 0, sizeof(FBPackEntry));
 
+            // Store real MC item ID always
+            strncpy(pe->real_item_type, item_id, FB_MAX_NAME - 1);
+
             // Display as "hats" for stone_button
             if (strcmp(item_id, "stone_button") == 0)
                 strncpy(pe->item_type, "hats", FB_MAX_NAME - 1);
@@ -1025,7 +1117,7 @@ bool fb_duplicate_to_item(const char *pack_root, const char *model_name,
     else
         fb_log(log, FB_LOG_SUCCESS, "Added to %s.json -> threshold %d", target_item_id, threshold);
 
-    update_model_list(pack_root, target_item_id, model_name, threshold, author, log);
+    update_model_list(pack_root, target_item_id, model_name, threshold, author, NULL, log);
 
     if (strcmp(target_item_id, "stone_button") == 0)
         fb_sync_helmets(pack_root, log);
@@ -1044,7 +1136,7 @@ bool fb_update_author(const char *pack_root, const char *mc_item_id,
     if (strcmp(mc_item_id, "hats") == 0) real_item = "stone_button";
 
     // Just reuse update_model_list — it replaces existing threshold entries
-    update_model_list(pack_root, real_item, "", threshold, new_author, log);
+    update_model_list(pack_root, real_item, "", threshold, new_author, NULL, log);
 
     // Actually we need the display name. Let's do it properly.
     char path[FB_MAX_PATH];
@@ -1098,4 +1190,219 @@ bool fb_update_author(const char *pack_root, const char *mc_item_id,
     free(content);
     fb_log(log, FB_LOG_WARN, "Threshold %d not found", threshold);
     return false;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Scan pack items (item types available in the pack)
+// ═════════════════════════════════════════════════════════════════════════════
+
+static const char *KNOWN_ITEMS[] = {
+    "stone_button", "pale_oak_button", "diamond_sword", "netherite_sword",
+    "wooden_sword", "bow", "totem_of_undying", "goat_horn", "apple",
+    "cooked_beef", "writable_book", "diamond_shovel", "diamond_axe",
+    "diamond_pickaxe", "cookie", "shield", "trident", "stick", "elytra",
+    "baked_potato", "golden_carrot", "feather", "carved_pumpkin", "bundle",
+    "white_wool", "milk_bucket", "snowball", "salmon", "leather",
+    NULL,
+};
+
+int fb_scan_pack_items(const char *pack_root, char items[][FB_MAX_NAME],
+                       int max_items) {
+    int count = 0;
+
+    // Add known items first
+    for (const char **k = KNOWN_ITEMS; *k && count < max_items; k++) {
+        strncpy(items[count++], *k, FB_MAX_NAME - 1);
+    }
+
+    // Scan pack's minecraft/items/ directory for additional item types
+    char dir[FB_MAX_PATH];
+    fb_path_join(dir, sizeof(dir), pack_root, MC_ITEMS_DIR_REL);
+    DIR *d = opendir(dir);
+    if (d) {
+        struct dirent *ent;
+        while ((ent = readdir(d)) && count < max_items) {
+            int len = (int)strlen(ent->d_name);
+            if (len < 6 || strcmp(ent->d_name + len - 5, ".json") != 0) continue;
+
+            char item_id[FB_MAX_NAME];
+            strncpy(item_id, ent->d_name, len - 5);
+            item_id[len - 5] = '\0';
+
+            // Skip if already in list
+            bool found = false;
+            for (int i = 0; i < count; i++) {
+                if (strcmp(items[i], item_id) == 0) { found = true; break; }
+            }
+            if (!found) strncpy(items[count++], item_id, FB_MAX_NAME - 1);
+        }
+        closedir(d);
+    }
+
+    // Sort alphabetically
+    for (int i = 0; i < count - 1; i++) {
+        for (int j = i + 1; j < count; j++) {
+            if (strcmp(items[i], items[j]) > 0) {
+                char tmp[FB_MAX_NAME];
+                memcpy(tmp, items[i], FB_MAX_NAME);
+                memcpy(items[i], items[j], FB_MAX_NAME);
+                memcpy(items[j], tmp, FB_MAX_NAME);
+            }
+        }
+    }
+
+    return count;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Check if model already exists
+// ═════════════════════════════════════════════════════════════════════════════
+
+bool fb_check_existing(const char *pack_root, const char *model_name,
+                       FBLog *log) {
+    char path[FB_MAX_PATH];
+
+    snprintf(path, sizeof(path), "%s/%s/%s.json", pack_root, FB_MODEL_DIR, model_name);
+    bool has_model = fb_file_exists(path);
+
+    snprintf(path, sizeof(path), "%s/%s/%s.png", pack_root, FB_TEXTURE_DIR, model_name);
+    bool has_texture = fb_file_exists(path);
+
+    if (has_model || has_texture) {
+        fb_log(log, FB_LOG_WARN, "'%s' already exists — overwriting", model_name);
+        return true;
+    }
+    return false;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Custom heading helpers
+// ═════════════════════════════════════════════════════════════════════════════
+
+bool fb_needs_heading_name(const char *mc_item_id,
+                           const FBCustomHeading *headings, int heading_count) {
+    // If it has a built-in heading, no custom one needed
+    if (fb_heading_for_item(mc_item_id)) return false;
+
+    // Check if there's a custom heading already
+    for (int i = 0; i < heading_count; i++) {
+        if (strcmp(headings[i].item_id, mc_item_id) == 0) return false;
+    }
+    return true;
+}
+
+const char *fb_custom_heading_for(const char *mc_item_id,
+                                  const FBCustomHeading *headings,
+                                  int heading_count) {
+    for (int i = 0; i < heading_count; i++) {
+        if (strcmp(headings[i].item_id, mc_item_id) == 0)
+            return headings[i].heading;
+    }
+    return NULL;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Zip the resource pack
+// ═════════════════════════════════════════════════════════════════════════════
+
+static bool is_excluded(const char *name) {
+    static const char *EXCLUDE_DIRS[] = {".git", "__pycache__", NULL};
+    for (const char **e = EXCLUDE_DIRS; *e; e++) {
+        if (strcmp(name, *e) == 0) return true;
+    }
+    return false;
+}
+
+static bool is_excluded_file(const char *name) {
+    if (strcmp(name, ".gitignore") == 0) return true;
+    // Skip zip files
+    int len = (int)strlen(name);
+    if (len > 4 && strcmp(name + len - 4, ".zip") == 0) return true;
+    return false;
+}
+
+static bool zip_add_dir(mz_zip_archive *zip, const char *root_path,
+                        const char *rel_prefix) {
+    DIR *d = opendir(root_path);
+    if (!d) return false;
+
+    struct dirent *ent;
+    while ((ent = readdir(d))) {
+        if (ent->d_name[0] == '.' && (ent->d_name[1] == '\0' ||
+            (ent->d_name[1] == '.' && ent->d_name[2] == '\0'))) continue;
+
+        char full[FB_MAX_PATH];
+        snprintf(full, sizeof(full), "%s/%s", root_path, ent->d_name);
+
+        char arc[FB_MAX_PATH];
+        if (rel_prefix[0])
+            snprintf(arc, sizeof(arc), "%s/%s", rel_prefix, ent->d_name);
+        else
+            snprintf(arc, sizeof(arc), "%s", ent->d_name);
+
+        struct stat st;
+        if (stat(full, &st) != 0) continue;
+
+        if (S_ISDIR(st.st_mode)) {
+            if (is_excluded(ent->d_name)) continue;
+            if (!zip_add_dir(zip, full, arc)) { closedir(d); return false; }
+        } else {
+            if (is_excluded_file(ent->d_name)) continue;
+            if (!mz_zip_writer_add_file(zip, arc, full, NULL, 0,
+                                        MZ_BEST_COMPRESSION)) {
+                closedir(d);
+                return false;
+            }
+        }
+    }
+    closedir(d);
+    return true;
+}
+
+bool fb_zip_pack(const char *pack_root, const char *output_path,
+                 FBLog *log) {
+    char path[FB_MAX_PATH];
+
+    if (output_path && output_path[0]) {
+        strncpy(path, output_path, sizeof(path) - 1);
+    } else {
+        // Default: <pack_parent>/pack.zip
+        char parent[FB_MAX_PATH];
+        strncpy(parent, pack_root, sizeof(parent) - 1);
+        char *last_slash = strrchr(parent, '/');
+        if (last_slash) *last_slash = '\0';
+        snprintf(path, sizeof(path), "%s/pack.zip", parent);
+    }
+
+    // Remove old zip
+    remove(path);
+
+    mz_zip_archive zip = {0};
+    if (!mz_zip_writer_init_file(&zip, path, 0)) {
+        fb_log(log, FB_LOG_ERROR, "Failed to create zip: %s", path);
+        return false;
+    }
+
+    fb_log(log, FB_LOG_HEADER, "Zipping pack...");
+
+    if (!zip_add_dir(&zip, pack_root, "")) {
+        fb_log(log, FB_LOG_ERROR, "Failed adding files to zip");
+        mz_zip_writer_end(&zip);
+        remove(path);
+        return false;
+    }
+
+    if (!mz_zip_writer_finalize_archive(&zip)) {
+        fb_log(log, FB_LOG_ERROR, "Failed to finalize zip");
+        mz_zip_writer_end(&zip);
+        remove(path);
+        return false;
+    }
+
+    mz_uint64 size = zip.m_archive_size;
+    mz_zip_writer_end(&zip);
+
+    fb_log(log, FB_LOG_SUCCESS, "Packed -> %s (%llu KB)", path,
+           (unsigned long long)(size / 1024));
+    return true;
 }
