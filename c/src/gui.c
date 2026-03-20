@@ -7,6 +7,7 @@
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 
+#include "filedialog.h"
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
@@ -124,14 +125,37 @@ static bool import_editing[4] = {false}; // track which fields are being edited
 static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     int cy = y + PAD;
 
+    int browse_w = 60;
     DrawText("Resource Pack Folder", x + PAD, cy, 11, C_DIM); cy += 14;
-    Rectangle pack_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), FIELD_H};
+    Rectangle pack_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD-browse_w-PAD), FIELD_H};
     if (GuiTextBox(pack_r, s->pack_path, FB_MAX_PATH, import_editing[0])) import_editing[0] = !import_editing[0];
+    Rectangle pack_btn = {(float)(x+w-PAD-browse_w), (float)cy, (float)browse_w, FIELD_H};
+    if (GuiButton(pack_btn, "Browse")) {
+        char tmp[FB_MAX_PATH];
+        if (fb_pick_folder(tmp, sizeof(tmp))) {
+            strncpy(s->pack_path, tmp, FB_MAX_PATH - 1);
+        }
+    }
     cy += FIELD_H + PAD;
 
-    DrawText("BBModel File (drag & drop onto window)", x + PAD, cy, 11, C_DIM); cy += 14;
-    Rectangle bb_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), FIELD_H};
+    DrawText("BBModel File (drag & drop or browse)", x + PAD, cy, 11, C_DIM); cy += 14;
+    Rectangle bb_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD-browse_w-PAD), FIELD_H};
     if (GuiTextBox(bb_r, s->bbmodel_path, FB_MAX_PATH, import_editing[1])) import_editing[1] = !import_editing[1];
+    Rectangle bb_btn = {(float)(x+w-PAD-browse_w), (float)cy, (float)browse_w, FIELD_H};
+    if (GuiButton(bb_btn, "Browse")) {
+        char tmp[FB_MAX_PATH];
+        if (fb_pick_bbmodel(tmp, sizeof(tmp))) {
+            strncpy(s->bbmodel_path, tmp, FB_MAX_PATH - 1);
+            fb_sanitize_name(tmp, s->model_name, FB_MAX_NAME);
+            // Also load preview
+            if (s->preview_loaded) fb_unload_model_textures(&s->preview_model);
+            if (fb_parse_bbmodel(tmp, &s->preview_model)) {
+                fb_load_bbmodel_textures(tmp, &s->preview_model);
+                s->preview_loaded = true;
+                reset_camera_to_model(&s->camera, &s->preview_model);
+            }
+        }
+    }
     cy += FIELD_H + PAD;
 
     DrawText("Model Name (blank = from filename)", x + PAD, cy, 11, C_DIM); cy += 14;
@@ -202,12 +226,21 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
 
     // Pack path
     DrawText("Resource Pack Folder", x+PAD, cy, 11, C_DIM); cy += 14;
-    Rectangle pack_r = {(float)(x+PAD), (float)cy, (float)(w - 2*PAD - 90), FIELD_H};
+    int mgr_browse_w = 60, mgr_scan_w = 80;
+    Rectangle pack_r = {(float)(x+PAD), (float)cy, (float)(w - 2*PAD - mgr_browse_w - mgr_scan_w - 2*PAD), FIELD_H};
     static bool pack_edit_m = false;
     if (GuiTextBox(pack_r, s->pack_path, FB_MAX_PATH, pack_edit_m)) pack_edit_m = !pack_edit_m;
 
+    Rectangle mgr_browse_r = {(float)(x + w - PAD - mgr_scan_w - PAD - mgr_browse_w), (float)cy, (float)mgr_browse_w, FIELD_H};
+    if (GuiButton(mgr_browse_r, "Browse")) {
+        char tmp[FB_MAX_PATH];
+        if (fb_pick_folder(tmp, sizeof(tmp))) {
+            strncpy(s->pack_path, tmp, FB_MAX_PATH - 1);
+        }
+    }
+
     // Scan button
-    Rectangle scan_r = {(float)(x + w - PAD - 80), (float)cy, 80, FIELD_H};
+    Rectangle scan_r = {(float)(x + w - PAD - mgr_scan_w), (float)cy, (float)mgr_scan_w, FIELD_H};
     if (GuiButton(scan_r, "Scan Pack")) {
         fb_log_clear(&s->log);
         s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
@@ -508,16 +541,26 @@ void fb_draw_gui(FBAppState *s) {
             break;
     }
 
-    // ── Right side: 3D viewport (always visible) ────────────────────────
-    int vp_x = PANEL_W;
-    int vp_w = sw - PANEL_W;
+    // ── Right side: 3D viewport ────────────────────────────────────────
+    // Full width on Preview tab, half width on other tabs
+    int vp_x, vp_w;
+    if (s->active_tab == TAB_PREVIEW) {
+        vp_x = PANEL_W;
+        vp_w = sw - PANEL_W;
+    } else {
+        vp_w = (sw - PANEL_W) / 2;
+        vp_x = sw - vp_w;
+        if (vp_w < 100) vp_w = 0; // hide if window too narrow
+    }
+
     if (vp_w > 0) {
-        if (s->active_tab == TAB_PREVIEW) {
-            update_orbital_camera(&s->camera, PANEL_W);
-        }
+        update_orbital_camera(&s->camera, vp_x);
         draw_preview_viewport(s, vp_x, 0, vp_w, sh);
     }
 
     // Panel border
     DrawLine(PANEL_W, 0, PANEL_W, sh, C_BORDER);
+    if (s->active_tab != TAB_PREVIEW && vp_w > 0) {
+        DrawLine(vp_x, 0, vp_x, sh, C_BORDER);
+    }
 }
