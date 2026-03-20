@@ -324,6 +324,53 @@ def delete_model(pack_root: str, mc_item_id: str, model_name: str,
     return log
 
 
+def update_author(pack_root: str, mc_item_id: str, threshold: int,
+                  display_name: str, new_author: str) -> tuple[str, str]:
+    """
+    Update the author for an entry in model list.txt.
+    Returns a (tag, message) log tuple.
+    """
+    list_path = os.path.join(pack_root, MODEL_LIST)
+    if not os.path.exists(list_path):
+        return ("error", "✗ model list.txt not found")
+
+    heading = _heading_for_item(mc_item_id)
+
+    if new_author:
+        new_line = f"{threshold} = {display_name} ({new_author})"
+    else:
+        new_line = f"{threshold} = {display_name}"
+
+    with open(list_path, "r", encoding="utf-8") as f:
+        lines = f.read().splitlines()
+
+    heading_pattern = f"{heading}:"
+    heading_idx = None
+    for i, line in enumerate(lines):
+        if line.strip() == heading_pattern:
+            heading_idx = i
+            break
+
+    if heading_idx is None:
+        return ("error", f"✗ Heading '{heading}' not found in model list.txt")
+
+    section_end = len(lines)
+    for i in range(heading_idx + 1, len(lines)):
+        stripped = lines[i].strip()
+        if stripped and not re.match(r"^\d+\s*=", stripped):
+            section_end = i
+            break
+
+    for i in range(heading_idx + 1, section_end):
+        if re.match(rf"^{threshold}\s*=", lines[i].strip()):
+            lines[i] = new_line
+            with open(list_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
+            return ("success", f"✓ Updated author: {new_line}")
+
+    return ("warn", f"⚠ Threshold {threshold} not found under '{heading}'")
+
+
 def _remove_from_model_list(pack_root: str, mc_item_id: str,
                             threshold: int) -> list[tuple[str, str]]:
     """Remove a threshold entry from model list.txt."""

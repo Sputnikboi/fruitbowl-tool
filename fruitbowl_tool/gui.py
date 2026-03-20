@@ -14,7 +14,7 @@ from .core import (
     sanitize_name, check_existing, needs_heading_name, scan_pack_items,
     add_to_pack,
 )
-from .manage import scan_all_models, delete_model
+from .manage import scan_all_models, delete_model, update_author
 from .deploy import zip_pack, compute_sha1, update_server_properties, upload_to_github, deploy_full, get_pack_url
 from .zfight import scan_pack as zfight_scan_pack, format_report as zfight_format_report
 
@@ -278,11 +278,16 @@ class FruitbowlApp:
         # Tag for missing-file rows
         self.manage_tree.tag_configure("missing", foreground="#e8c85a")
 
+        # Double-click author column to edit inline
+        self.manage_tree.bind("<Double-1>", self._manage_edit_author_inline)
+
         # ── Action buttons ───────────────────────────────────────────────
         btn_col = ttk.Frame(manage)
         btn_col.grid(row=row, column=2, sticky="n", **pad)
         ttk.Button(btn_col, text="Scan Pack", width=12,
                    command=self._manage_scan).pack(pady=2)
+        ttk.Button(btn_col, text="Set Author…", width=12,
+                   command=self._manage_set_author).pack(pady=(16, 2))
         ttk.Button(btn_col, text="Delete", width=12,
                    command=self._manage_delete).pack(pady=(16, 2))
         ttk.Button(btn_col, text="Update…", width=12,
@@ -782,6 +787,104 @@ class FruitbowlApp:
                 reverse=self._manage_sort_reverse)
 
         self._manage_populate_tree()
+
+    def _manage_set_author(self):
+        """Set author for all selected models via a dialog."""
+        selected = self.manage_tree.selection()
+        if not selected:
+            messagebox.showinfo("No selection", "Select one or more models first.")
+            return
+
+        pack = self.pack_path.get().strip()
+        if not pack or not os.path.isdir(pack):
+            self._log_to(self.manage_log, "ERROR: Invalid pack path.", "error")
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Set Author")
+        dialog.resizable(False, False)
+        dialog.grab_set()
+
+        ttk.Label(dialog, text=f"Author for {len(selected)} selected model(s):",
+                  padding=(12, 12, 12, 4)).pack()
+        ttk.Label(dialog, text="(leave blank to remove author)",
+                  font=("", 8), padding=(12, 0, 12, 4)).pack()
+        author_var = tk.StringVar()
+        entry = ttk.Entry(dialog, textvariable=author_var, width=30)
+        entry.pack(padx=12, pady=4)
+        entry.focus_set()
+
+        def apply():
+            new_author = author_var.get().strip()
+            dialog.destroy()
+
+            self._log_clear(self.manage_log)
+            for iid in selected:
+                idx = int(iid)
+                m = self.manage_models[idx]
+                real_item = m.get("real_item_type", m["item_type"])
+                tag, msg = update_author(
+                    pack, real_item, m["threshold"],
+                    m["display_name"], new_author)
+                self._log_to(self.manage_log, msg, tag)
+                m["author"] = new_author
+
+            self._manage_populate_tree()
+
+        entry.bind("<Return>", lambda e: apply())
+        entry.bind("<Escape>", lambda e: dialog.destroy())
+
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(pady=(8, 12))
+        ttk.Button(btn_frame, text="Apply", command=apply, width=8).pack(
+            side="left", padx=4)
+        ttk.Button(btn_frame, text="Cancel", command=dialog.destroy, width=8).pack(
+            side="left", padx=4)
+
+    def _manage_edit_author_inline(self, event):
+        """Double-click on the author column to edit inline."""
+        region = self.manage_tree.identify("region", event.x, event.y)
+        if region != "cell":
+            return
+        column = self.manage_tree.identify_column(event.x)
+        if column != "#4":  # author is the 4th column
+            return
+        iid = self.manage_tree.identify_row(event.y)
+        if not iid:
+            return
+
+        pack = self.pack_path.get().strip()
+        if not pack or not os.path.isdir(pack):
+            return
+
+        idx = int(iid)
+        m = self.manage_models[idx]
+        bbox = self.manage_tree.bbox(iid, column)
+        if not bbox:
+            return
+
+        current_val = m.get("author", "")
+        entry_var = tk.StringVar(value=current_val)
+        entry = ttk.Entry(self.manage_tree, textvariable=entry_var, width=15)
+        entry.place(x=bbox[0], y=bbox[1], width=bbox[2], height=bbox[3])
+        entry.focus_set()
+        entry.select_range(0, "end")
+
+        def finish(event=None):
+            new_author = entry_var.get().strip()
+            entry.destroy()
+            if new_author != current_val:
+                real_item = m.get("real_item_type", m["item_type"])
+                tag, msg = update_author(
+                    pack, real_item, m["threshold"],
+                    m["display_name"], new_author)
+                self._log_to(self.manage_log, msg, tag)
+                m["author"] = new_author
+                self._manage_populate_tree()
+
+        entry.bind("<Return>", finish)
+        entry.bind("<FocusOut>", finish)
+        entry.bind("<Escape>", lambda e: entry.destroy())
 
     def _manage_delete(self):
         selected = self.manage_tree.selection()
