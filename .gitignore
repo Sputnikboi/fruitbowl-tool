@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 .fruitbowl_tool.json
+c/fruitbowl_tool
+c/lib/libraylib.a
