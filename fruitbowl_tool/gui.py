@@ -826,8 +826,8 @@ class FruitbowlApp:
                          f"  {m['model_name']} (#{m['threshold']} in {m['item_type']})",
                          "header")
             try:
-                messages = delete_model(pack, m["item_type"], m["model_name"],
-                                        m["threshold"])
+                messages = delete_model(pack, m.get("real_item_type", m["item_type"]),
+                                        m["model_name"], m["threshold"])
                 for tag, msg in messages:
                     self._log_to(self.manage_log, f"    {msg}", tag)
             except Exception as e:
@@ -873,7 +873,7 @@ class FruitbowlApp:
 
         try:
             messages = add_to_pack(
-                bbmodel_path, pack, m["item_type"],
+                bbmodel_path, pack, m.get("real_item_type", m["item_type"]),
                 model_name=m["model_name"], author=m["author"])
             for tag, msg in messages:
                 self._log_to(self.manage_log, msg, tag)

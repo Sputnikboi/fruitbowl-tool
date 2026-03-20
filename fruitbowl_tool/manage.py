@@ -79,12 +79,26 @@ def _heading_for_item(mc_item_id: str) -> str:
     return ITEM_TO_HEADING.get(mc_item_id, mc_item_id.replace("_", " ").title())
 
 
+
+# ── Items whose dispatch files are synced copies of a canonical source ────
+# These are skipped during scan to avoid duplicates. The canonical source
+# is shown instead, grouped under a friendlier display name.
+HAT_ITEMS = {"stone_button"}
+SYNCED_HELMET_ITEMS = {
+    "leather_helmet", "chainmail_helmet", "iron_helmet",
+    "golden_helmet", "diamond_helmet", "netherite_helmet", "turtle_helmet",
+}
+
+
 def scan_all_models(pack_root: str) -> list[dict]:
     """
     Scan the entire pack and return a list of model info dicts.
     Each dict has: item_type, model_name, threshold, author, display_name,
                    has_texture, has_model, has_item_def.
     Source of truth is the dispatch JSONs in minecraft/items/.
+
+    Helmet dispatch files are skipped (they're synced copies of stone_button).
+    Hat items (stone_button, pale_oak_button) are grouped under a 'Hats' display.
     """
     models = []
     mc_items_dir = os.path.join(pack_root, MC_ITEMS_DIR)
@@ -100,6 +114,11 @@ def scan_all_models(pack_root: str) -> list[dict]:
             continue
 
         mc_item_id = os.path.splitext(filename)[0]
+
+        # Skip helmet dispatch files — they're synced copies of hat items
+        if mc_item_id in SYNCED_HELMET_ITEMS:
+            continue
+
         filepath = os.path.join(mc_items_dir, filename)
 
         try:
@@ -118,9 +137,20 @@ def scan_all_models(pack_root: str) -> list[dict]:
         entries = model_data.get("entries", [])
         heading = _heading_for_item(mc_item_id)
 
+        # Use "Hats" as display item_type for hat items
+        display_item_type = "hats" if mc_item_id in HAT_ITEMS else mc_item_id
+
         for entry in entries:
             threshold = entry.get("threshold", 0)
-            model_ref = entry.get("model", {}).get("model", "")
+
+            # Extract model ref — handle both simple and condition wrappers
+            entry_model = entry.get("model", {})
+            model_ref = entry_model.get("model", "")
+            if not model_ref:
+                # Check condition wrappers (trident/bow)
+                model_ref = entry_model.get("on_false", {}).get("model", "")
+            if not model_ref:
+                model_ref = entry_model.get("on_true", {}).get("model", "")
 
             # Only include fruitbowl models
             if not model_ref.startswith("fruitbowl:item/"):
@@ -140,7 +170,8 @@ def scan_all_models(pack_root: str) -> list[dict]:
             display_name = model_name.replace("_", " ").title()
 
             models.append({
-                "item_type": mc_item_id,
+                "item_type": display_item_type,
+                "real_item_type": mc_item_id,
                 "model_name": model_name,
                 "threshold": threshold,
                 "author": author,
