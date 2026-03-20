@@ -731,9 +731,13 @@ class FruitbowlApp:
         for i, m in enumerate(self.manage_models):
             # Filter
             if query:
-                searchable = f"{m['item_type']} {m.get('real_item_type', '')} {m['model_name']} {m['author']}".lower()
-                if query not in searchable:
-                    continue
+                if query == "noauthor":
+                    if m.get("author"):
+                        continue
+                else:
+                    searchable = f"{m['item_type']} {m.get('real_item_type', '')} {m['model_name']} {m['author']}".lower()
+                    if query not in searchable:
+                        continue
 
             # Status column
             all_ok = m["has_texture"] and m["has_model"] and m["has_item_def"]
@@ -780,6 +784,11 @@ class FruitbowlApp:
         if col == "threshold":
             self.manage_models.sort(
                 key=lambda m: m[col], reverse=self._manage_sort_reverse)
+        elif col == "author":
+            # Sort empties to top (ascending) so you can find models without authors
+            self.manage_models.sort(
+                key=lambda m: (bool(m.get("author")), m.get("author", "").lower()),
+                reverse=self._manage_sort_reverse)
         else:
             self.manage_models.sort(
                 key=lambda m: m.get(col, "").lower()
