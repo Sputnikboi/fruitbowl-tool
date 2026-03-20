@@ -3,34 +3,33 @@
 #include "renderer.h"
 #include "model.h"
 #include <string.h>
-#include <stdio.h>
 
 int main(int argc, char **argv) {
-    // Init state
     FBAppState state = {0};
+    state.manage_selected = -1;
+    state.active_tab = TAB_PREVIEW;
     fb_init_camera(&state.camera);
 
-    // Window — must come before any texture loading
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
-    InitWindow(1100, 700, "Fruitbowl Resource Pack Tool");
+    InitWindow(1200, 750, "Fruitbowl Resource Pack Tool");
     SetTargetFPS(60);
-    SetTraceLogLevel(LOG_WARNING);  // Reduce raylib spam
+    SetTraceLogLevel(LOG_WARNING);
 
-    // If a .bbmodel was passed as argument, load it
+    // Style is configured in gui.c
+
+    // Load .bbmodel from command line
     if (argc > 1) {
         const char *path = argv[1];
         int len = (int)strlen(path);
         if (len > 8 && strcmp(path + len - 8, ".bbmodel") == 0) {
             if (fb_parse_bbmodel(path, &state.preview_model)) {
-                if (fb_load_bbmodel_textures(path, &state.preview_model)) {
-                    state.preview_loaded = true;
-                    strncpy(state.bbmodel_path, path, FB_MAX_PATH - 1);
-                }
+                fb_load_bbmodel_textures(path, &state.preview_model);
+                state.preview_loaded = true;
+                strncpy(state.bbmodel_path, path, FB_MAX_PATH - 1);
             }
         }
     }
 
-    // Main loop
     while (!WindowShouldClose() && !state.should_close) {
         BeginDrawing();
         ClearBackground((Color){35, 35, 38, 255});
@@ -38,11 +37,7 @@ int main(int argc, char **argv) {
         EndDrawing();
     }
 
-    // Cleanup
-    if (state.preview_loaded) {
-        fb_unload_model_textures(&state.preview_model);
-    }
+    if (state.preview_loaded) fb_unload_model_textures(&state.preview_model);
     CloseWindow();
-
     return 0;
 }

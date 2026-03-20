@@ -10,16 +10,16 @@
 #define FB_MAX_TEXTURES     16
 #define FB_MAX_NAME         128
 #define FB_MAX_PATH         512
-#define FB_MAX_MODELS       512
+#define FB_MAX_MODELS       1024
 #define FB_MAX_ENTRIES      256
-#define FB_MAX_LOG          64
+#define FB_MAX_LOG          128
 
 // ── Model types ─────────────────────────────────────────────────────────────
 
 typedef struct {
-    float uv[4];           // [u1, v1, u2, v2] in MC 0-16 space
-    int   texture_idx;     // which texture this face uses
-    int   rotation;        // UV rotation (0, 90, 180, 270)
+    float uv[4];
+    int   texture_idx;
+    int   rotation;
     bool  has_texture;
 } FBFace;
 
@@ -28,8 +28,8 @@ typedef struct {
     float to[3];
     float rot_angle;
     float rot_origin[3];
-    char  rot_axis;        // 'x', 'y', 'z', or 0 for none
-    FBFace faces[6];       // north, east, south, west, up, down
+    char  rot_axis;
+    FBFace faces[6];
     bool  shade;
 } FBElement;
 
@@ -61,26 +61,9 @@ typedef struct {
     int        texture_count;
     FBDisplay  display;
     bool       has_display;
-
-    // Loaded textures for rendering
     Texture2D  textures[FB_MAX_TEXTURES];
     bool       textures_loaded;
 } FBModel;
-
-// ── BBModel (raw parsed, before conversion) ─────────────────────────────────
-
-typedef struct {
-    char   name[FB_MAX_NAME];
-    char   source_b64[1];  // flexible array — NOT used, we parse differently
-} FBBBTexture;
-
-typedef struct {
-    int    width;
-    int    height;
-    int    texture_count;
-    char   texture_names[FB_MAX_TEXTURES][FB_MAX_NAME];
-    // Base64 sources stored separately due to size
-} FBBBResolution;
 
 // ── Pack management ─────────────────────────────────────────────────────────
 
@@ -95,11 +78,6 @@ typedef struct {
     bool has_item_def;
 } FBPackEntry;
 
-typedef struct {
-    FBPackEntry entries[FB_MAX_MODELS];
-    int         count;
-} FBPackIndex;
-
 // ── Log messages ────────────────────────────────────────────────────────────
 
 typedef enum {
@@ -111,7 +89,7 @@ typedef enum {
 } FBLogLevel;
 
 typedef struct {
-    char      text[256];
+    char       text[256];
     FBLogLevel level;
 } FBLogEntry;
 
@@ -123,8 +101,7 @@ typedef struct {
 // ── App state ───────────────────────────────────────────────────────────────
 
 typedef enum {
-    TAB_SINGLE,
-    TAB_BATCH,
+    TAB_IMPORT,
     TAB_MANAGE,
     TAB_PREVIEW,
 } FBTab;
@@ -137,10 +114,18 @@ typedef struct {
     char author[FB_MAX_NAME];
     char item_type[FB_MAX_NAME];
 
-    // State
+    // Active tab
     FBTab       active_tab;
-    FBPackIndex pack_index;
+
+    // Log
     FBLog       log;
+
+    // Pack scan results
+    FBPackEntry pack_entries[FB_MAX_MODELS];
+    int         pack_entry_count;
+    int         manage_selected;        // index into pack_entries, -1 = none
+    char        manage_filter[FB_MAX_NAME];
+    float       manage_scroll;
 
     // Preview
     FBModel     preview_model;
@@ -149,6 +134,7 @@ typedef struct {
 
     // GUI state
     bool        should_close;
+    bool        pack_scanned;
 } FBAppState;
 
 #endif // FB_TYPES_H
