@@ -1,0 +1,272 @@
+{
+  "model": {
+    "type": "minecraft:range_dispatch",
+    "property": "minecraft:custom_model_data",
+    "index": 0,
+    "fallback": {
+      "type": "minecraft:model",
+      "model": "minecraft:block/white_wool"
+    },
+    "entries": [
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/doll_base"
+        },
+        "threshold": 1
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/doll_pile"
+        },
+        "threshold": 2
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/laying_doll"
+        },
+        "threshold": 3
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/fallen_doll"
+        },
+        "threshold": 4
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/reed_doll"
+        },
+        "threshold": 5
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/kite_doll"
+        },
+        "threshold": 6
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/ary_doll"
+        },
+        "threshold": 7
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/humarr_doll"
+        },
+        "threshold": 8
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/belle_doll"
+        },
+        "threshold": 9
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/ryder_doll"
+        },
+        "threshold": 10
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/bike_lego"
+        },
+        "threshold": 11
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/bike"
+        },
+        "threshold": 12
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/jynx_doll"
+        },
+        "threshold": 13
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/wemmbu_doll"
+        },
+        "threshold": 14
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/violet_doll"
+        },
+        "threshold": 15
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/abolish_doll"
+        },
+        "threshold": 16
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/mix_doll"
+        },
+        "threshold": 17
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/princezam_doll"
+        },
+        "threshold": 18
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/etern4l_doll"
+        },
+        "threshold": 19
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/jae_doll"
+        },
+        "threshold": 20
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/ayliu_doll"
+        },
+        "threshold": 21
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/jet_doll"
+        },
+        "threshold": 22
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/josev_doll"
+        },
+        "threshold": 23
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/vampire_josev_doll"
+        },
+        "threshold": 24
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/vsmp_avid_doll"
+        },
+        "threshold": 25
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/hampter"
+        },
+        "threshold": 26
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/teddy_bear"
+        },
+        "threshold": 27
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/hampter_two"
+        },
+        "threshold": 28
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/will_doll"
+        },
+        "threshold": 29
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/cinfral_doll"
+        },
+        "threshold": 30
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/feinberg_doll"
+        },
+        "threshold": 31
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/ruden_doll"
+        },
+        "threshold": 32
+      },
+      {
+        "threshold": 33,
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/arbazzu_doll"
+        }
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/harvey_toy"
+        },
+        "threshold": 34
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/snow_plush"
+        },
+        "threshold": 35
+      },
+      {
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/chef_hampter"
+        },
+        "threshold": 36
+      },
+      {
+        "threshold": 37,
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/mumbo_toy"
+        }
+      }
+    ]
+  }
+}
