@@ -504,10 +504,23 @@ void fb_draw_gui(FBAppState *s) {
         if (IsKeyPressed(KEY_G)) show_grid = !show_grid;
     }
 
+    // ── Compute viewport and panel sizes ───────────────────────────────
+    int vp_x, vp_w, panel_w;
+    if (s->active_tab == TAB_PREVIEW) {
+        panel_w = PANEL_W;
+        vp_x = PANEL_W;
+        vp_w = sw - PANEL_W;
+    } else {
+        vp_w = (sw - PANEL_W) / 2;
+        if (vp_w < 100) vp_w = 0;
+        panel_w = sw - vp_w;
+        vp_x = panel_w;
+    }
+
     // ── Tab bar ─────────────────────────────────────────────────────────
     const char *tab_names[] = {"Import", "Manage", "Preview"};
     int tab_count = 3;
-    int tab_w = PANEL_W / tab_count;
+    int tab_w = panel_w / tab_count;
 
     for (int i = 0; i < tab_count; i++) {
         Rectangle r = {(float)(i * tab_w), 0, (float)tab_w, TAB_H};
@@ -521,36 +534,24 @@ void fb_draw_gui(FBAppState *s) {
             s->active_tab = (FBTab)i;
         }
     }
-    DrawLine(0, TAB_H, PANEL_W, TAB_H, C_BORDER);
+    DrawLine(0, TAB_H, panel_w, TAB_H, C_BORDER);
 
     // ── Left panel content ──────────────────────────────────────────────
     int panel_y = TAB_H;
     int panel_h = sh - TAB_H;
 
-    DrawRectangle(0, panel_y, PANEL_W, panel_h, C_PANEL);
+    DrawRectangle(0, panel_y, panel_w, panel_h, C_PANEL);
 
     switch (s->active_tab) {
         case TAB_IMPORT:
-            draw_import_tab(s, 0, panel_y, PANEL_W, panel_h);
+            draw_import_tab(s, 0, panel_y, panel_w, panel_h);
             break;
         case TAB_MANAGE:
-            draw_manage_tab(s, 0, panel_y, PANEL_W, panel_h);
+            draw_manage_tab(s, 0, panel_y, panel_w, panel_h);
             break;
         case TAB_PREVIEW:
-            draw_preview_sidebar(s, 0, panel_y, PANEL_W, panel_h);
+            draw_preview_sidebar(s, 0, panel_y, panel_w, panel_h);
             break;
-    }
-
-    // ── Right side: 3D viewport ────────────────────────────────────────
-    // Full width on Preview tab, half width on other tabs
-    int vp_x, vp_w;
-    if (s->active_tab == TAB_PREVIEW) {
-        vp_x = PANEL_W;
-        vp_w = sw - PANEL_W;
-    } else {
-        vp_w = (sw - PANEL_W) / 2;
-        vp_x = sw - vp_w;
-        if (vp_w < 100) vp_w = 0; // hide if window too narrow
     }
 
     if (vp_w > 0) {
