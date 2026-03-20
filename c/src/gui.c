@@ -224,6 +224,7 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 static bool filter_editing = false;
+static char prev_filter[FB_MAX_NAME] = {0};
 
 static bool entry_matches_filter(const FBPackEntry *e, const char *filter) {
     if (!filter[0]) return true;
@@ -273,6 +274,12 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
     DrawText("Search (type 'noauthor' to find missing)", x+PAD, cy, 11, C_DIM); cy += FONT_LABEL + 3;
     Rectangle filt_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), FIELD_H};
     if (GuiTextBox(filt_r, s->manage_filter, FB_MAX_NAME, filter_editing)) filter_editing = !filter_editing;
+    // Reset scroll when filter changes
+    if (strcmp(s->manage_filter, prev_filter) != 0) {
+        s->manage_scroll = 0;
+        s->manage_selected = -1;
+        strncpy(prev_filter, s->manage_filter, FB_MAX_NAME - 1);
+    }
     cy += FIELD_H + PAD;
 
     // Model list header — columns proportional to width
