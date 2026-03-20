@@ -365,21 +365,13 @@ class FruitbowlApp:
             self.batch_item_combo["values"] = self.available_items
 
     def _filter_combo(self, combo: ttk.Combobox):
+        """Filter combobox values as user types. Click the dropdown arrow to see matches."""
         typed = combo.get().lower()
         if not typed:
             combo["values"] = self.available_items
-            try:
-                combo.tk.call("ttk::combobox::Unpost", combo)
-            except Exception:
-                pass
             return
         filtered = [item for item in self.available_items if typed in item]
         combo["values"] = filtered
-        if filtered:
-            try:
-                combo.tk.call("ttk::combobox::Post", combo)
-            except Exception:
-                pass
 
     def _ask_heading_name(self, item_id: str) -> str | None:
         saved = self.settings.get("custom_headings", {}).get(item_id)
