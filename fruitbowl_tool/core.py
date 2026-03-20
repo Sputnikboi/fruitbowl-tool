@@ -141,6 +141,32 @@ def build_model_json(bbmodel: dict, model_name: str) -> dict:
 
         elements.append(entry)
 
+    # Shift model into MC bounds (-16 to 32) if any coordinates exceed limits
+    MC_MIN, MC_MAX = -16, 32
+    mins = [999.0, 999.0, 999.0]
+    maxs = [-999.0, -999.0, -999.0]
+    for el in elements:
+        for i in range(3):
+            mins[i] = min(mins[i], el["from"][i], el["to"][i])
+            maxs[i] = max(maxs[i], el["from"][i], el["to"][i])
+
+    shift = [0.0, 0.0, 0.0]
+    for i in range(3):
+        if maxs[i] > MC_MAX:
+            shift[i] = MC_MAX - maxs[i]
+        if mins[i] + shift[i] < MC_MIN:
+            shift[i] = MC_MIN - mins[i]
+
+    if any(s != 0 for s in shift):
+        for el in elements:
+            for i in range(3):
+                el["from"][i] = round(el["from"][i] + shift[i], 4)
+                el["to"][i] = round(el["to"][i] + shift[i], 4)
+            rot = el.get("rotation")
+            if rot and "origin" in rot:
+                for i in range(3):
+                    rot["origin"][i] = round(rot["origin"][i] + shift[i], 4)
+
     model = {
         "credit": "Made with Blockbench",
         "textures": textures,
