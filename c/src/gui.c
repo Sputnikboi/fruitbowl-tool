@@ -271,7 +271,9 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
     cy += ROW_H;
 
     // Scrollable model list
-    int list_h = h - (cy - y) - 180; // Leave room for buttons + log
+    // Reserve: buttons (BTN_H) + count label (16) + log label (14) + log area (~80) + padding
+    int reserve = BTN_H + 16 + 14 + 80 + 4*PAD;
+    int list_h = h - (cy - y) - reserve;
     if (list_h < 60) list_h = 60;
     Rectangle list_area = {(float)list_x, (float)cy, (float)list_w, (float)list_h};
 
@@ -559,9 +561,8 @@ void fb_draw_gui(FBAppState *s) {
         draw_preview_viewport(s, vp_x, 0, vp_w, sh);
     }
 
-    // Panel border
-    DrawLine(PANEL_W, 0, PANEL_W, sh, C_BORDER);
-    if (s->active_tab != TAB_PREVIEW && vp_w > 0) {
+    // Panel/viewport border
+    if (vp_w > 0) {
         DrawLine(vp_x, 0, vp_x, sh, C_BORDER);
     }
 }

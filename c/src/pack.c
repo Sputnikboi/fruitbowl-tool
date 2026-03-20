@@ -786,12 +786,89 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
 // Scan pack
 // ═════════════════════════════════════════════════════════════════════════════
 
+// Parse model list.txt to build author lookup: key="heading|threshold" -> author string
+// Stores into a flat array of {heading, threshold, author} for lookup
+typedef struct { char heading[FB_MAX_NAME]; int threshold; char author[FB_MAX_NAME]; } AuthorEntry;
+#define MAX_AUTHOR_ENTRIES 1024
+
+static int parse_authors(const char *pack_root, AuthorEntry *out, int max) {
+    char path[FB_MAX_PATH];
+    fb_path_join(path, sizeof(path), pack_root, FB_MODEL_LIST);
+    int file_len;
+    char *content = fb_read_file(path, &file_len);
+    if (!content) return 0;
+
+    int count = 0;
+    char current_heading[FB_MAX_NAME] = {0};
+    char *line = strtok(content, "\n");
+    while (line && count < max) {
+        // Trim CR
+        int len = (int)strlen(line);
+        while (len > 0 && (line[len-1] == '\r' || line[len-1] == ' ')) line[--len] = '\0';
+
+        if (len == 0) { line = strtok(NULL, "\n"); continue; }
+
+        // Check if heading (ends with : and doesn't start with digit)
+        if (line[len-1] == ':' && !(line[0] >= '0' && line[0] <= '9')) {
+            strncpy(current_heading, line, len - 1);
+            current_heading[len - 1] = '\0';
+            line = strtok(NULL, "\n");
+            continue;
+        }
+
+        // Parse "N = Display Name (Author)"
+        int threshold = 0;
+        if (line[0] >= '0' && line[0] <= '9') {
+            threshold = atoi(line);
+            char *eq = strchr(line, '=');
+            if (eq && current_heading[0]) {
+                // Find author in parens at end
+                char *paren_open = NULL;
+                // Find last '(' that has a matching ')'
+                for (char *p = eq + 1; *p; p++) {
+                    if (*p == '(') paren_open = p;
+                }
+                AuthorEntry *ae = &out[count];
+                strncpy(ae->heading, current_heading, FB_MAX_NAME - 1);
+                ae->threshold = threshold;
+                ae->author[0] = '\0';
+                if (paren_open) {
+                    char *paren_close = strchr(paren_open, ')');
+                    if (paren_close && paren_close > paren_open + 1) {
+                        int alen = (int)(paren_close - paren_open - 1);
+                        if (alen >= FB_MAX_NAME) alen = FB_MAX_NAME - 1;
+                        strncpy(ae->author, paren_open + 1, alen);
+                        ae->author[alen] = '\0';
+                    }
+                }
+                count++;
+            }
+        }
+        line = strtok(NULL, "\n");
+    }
+    free(content);
+    return count;
+}
+
+static const char *find_author(AuthorEntry *authors, int author_count,
+                               const char *heading, int threshold) {
+    for (int i = 0; i < author_count; i++) {
+        if (authors[i].threshold == threshold && strcmp(authors[i].heading, heading) == 0)
+            return authors[i].author;
+    }
+    return "";
+}
+
 int fb_scan_pack(const char *pack_root, FBPackEntry *entries, int max_entries) {
     char dir[FB_MAX_PATH];
     fb_path_join(dir, sizeof(dir), pack_root, MC_ITEMS_DIR_REL);
 
     DIR *d = opendir(dir);
     if (!d) return 0;
+
+    // Parse authors from model list
+    static AuthorEntry authors[MAX_AUTHOR_ENTRIES];
+    int author_count = parse_authors(pack_root, authors, MAX_AUTHOR_ENTRIES);
 
     int count = 0;
     struct dirent *ent;
@@ -820,6 +897,13 @@ int fb_scan_pack(const char *pack_root, FBPackEntry *entries, int max_entries) {
             continue;
         }
 
+        const char *heading = fb_heading_for_item(item_id);
+        char heading_buf[FB_MAX_NAME];
+        if (!heading) {
+            fb_display_name(item_id, heading_buf, sizeof(heading_buf));
+            heading = heading_buf;
+        }
+
         cJSON *dispatch_entries = cJSON_GetObjectItem(model_data, "entries");
         cJSON *entry;
         cJSON_ArrayForEach(entry, dispatch_entries) {
@@ -841,6 +925,10 @@ int fb_scan_pack(const char *pack_root, FBPackEntry *entries, int max_entries) {
             strncpy(pe->model_name, ref, FB_MAX_NAME - 1);
             pe->threshold = threshold;
             fb_display_name(ref, pe->display_name, FB_MAX_NAME);
+
+            // Author lookup from model list
+            const char *auth = find_author(authors, author_count, heading, threshold);
+            if (auth) strncpy(pe->author, auth, FB_MAX_NAME - 1);
 
             // Check file existence
             char check[FB_MAX_PATH];
