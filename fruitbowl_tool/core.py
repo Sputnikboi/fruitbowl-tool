@@ -101,14 +101,12 @@ def build_model_json(bbmodel: dict, model_name: str) -> dict:
     res = bbmodel.get("resolution", {"width": 16, "height": 16})
     texture_size = [res["width"], res["height"]]
 
-    # bbmodel stores pixel coordinates.  When texture_size is written to the
-    # output model MC already interprets UVs in that pixel space, so we must
-    # NOT rescale.  Only rescale for the default 16x16 where texture_size is
-    # omitted from the output.
-    if res["width"] == 16 and res["height"] == 16:
-        texture_size = None          # omit from output; UVs are already 0-16
-    uv_scale_x = 1.0
-    uv_scale_y = 1.0
+    # UV scaling: bbmodel stores pixel coordinates, MC expects 0-16 based coords.
+    # MC with texture_size [W, H] interprets UV value N as pixel N * (W/16).
+    # So to convert bbmodel pixel coords to MC UVs: mc_uv = pixel * 16 / W
+    # For 16x16 textures this is a no-op (scale = 1.0).
+    uv_scale_x = 16.0 / res["width"]
+    uv_scale_y = 16.0 / res["height"]
 
     # Build texture references — each bbmodel texture gets its own file
     # Primary texture (most used) → model_name, others → model_name_N
@@ -211,11 +209,10 @@ def build_model_json(bbmodel: dict, model_name: str) -> dict:
 
     model = {
         "credit": "Made with Blockbench",
+        "texture_size": texture_size,
         "textures": textures,
         "elements": elements,
     }
-    if texture_size is not None:
-        model["texture_size"] = texture_size
 
     if "display" in bbmodel:
         model["display"] = bbmodel["display"]
