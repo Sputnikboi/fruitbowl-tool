@@ -63,6 +63,39 @@ def extract_texture_png(bbmodel: dict) -> bytes:
     return base64.b64decode(b64)
 
 
+def extract_all_textures(bbmodel: dict) -> dict[int, bytes]:
+    """Extract all embedded textures used by faces. Returns {array_index: png_bytes}."""
+    textures = bbmodel.get("textures", [])
+    if not textures:
+        raise ValueError("No textures found in .bbmodel file.")
+
+    # Find which texture indices are actually used by faces
+    used_indices: set[int] = set()
+    for el in bbmodel.get("elements", []):
+        for face_data in el.get("faces", {}).values():
+            tex = face_data.get("texture")
+            if tex is not None:
+                used_indices.add(tex)
+
+    if not used_indices:
+        used_indices.add(0)
+
+    result: dict[int, bytes] = {}
+    for idx in used_indices:
+        if idx >= len(textures):
+            continue
+        source = textures[idx].get("source", "")
+        if not source.startswith("data:image/png;base64,"):
+            continue
+        b64 = source.split(",", 1)[1]
+        result[idx] = base64.b64decode(b64)
+
+    if not result:
+        raise ValueError("No valid embedded PNG textures found.")
+
+    return result
+
+
 def build_model_json(bbmodel: dict, model_name: str) -> dict:
     """Convert .bbmodel → Minecraft resource pack model JSON."""
     res = bbmodel.get("resolution", {"width": 16, "height": 16})
@@ -77,18 +110,27 @@ def build_model_json(bbmodel: dict, model_name: str) -> dict:
     uv_scale_x = 1.0
     uv_scale_y = 1.0
 
-    # Find the primary texture and map all references to it
+    # Build texture references — each bbmodel texture gets its own file
+    # Primary texture (most used) → model_name, others → model_name_N
     primary_idx = _find_primary_texture_index(bbmodel)
-    textures = {
-        str(primary_idx): f"fruitbowl:item/{model_name}",
-        "particle": f"fruitbowl:item/{model_name}",
-    }
-    # Also map any other texture indices used by faces to the same texture
+    used_indices: set[int] = set()
     for el in bbmodel.get("elements", []):
         for face_data in el.get("faces", {}).values():
             tex = face_data.get("texture")
-            if tex is not None and str(tex) not in textures:
-                textures[str(tex)] = f"fruitbowl:item/{model_name}"
+            if tex is not None:
+                used_indices.add(tex)
+    if not used_indices:
+        used_indices.add(0)
+
+    textures = {}
+    for idx in used_indices:
+        if idx == primary_idx:
+            textures[str(idx)] = f"fruitbowl:item/{model_name}"
+        else:
+            textures[str(idx)] = f"fruitbowl:item/{model_name}_{idx}"
+
+    # Particle uses the primary texture
+    textures["particle"] = f"fruitbowl:item/{model_name}"
 
     # Convert elements
     elements = []
@@ -461,12 +503,20 @@ def add_to_pack(bbmodel_path: str, pack_root: str, mc_item_id: str,
     else:
         log.append(("info", f"Adding new model '{model_name}'"))
 
-    # 1 — Texture
-    png_data = extract_texture_png(bbmodel)
+    # 1 — Textures (extract all, primary gets model_name, others get model_name_N)
+    primary_idx = _find_primary_texture_index(bbmodel)
+    all_textures = extract_all_textures(bbmodel)
     os.makedirs(os.path.dirname(texture_path), exist_ok=True)
-    with open(texture_path, "wb") as f:
-        f.write(png_data)
-    log.append(("success", f"✓ Texture → textures/item/{model_name}.png"))
+
+    for tex_idx, png_data in all_textures.items():
+        if tex_idx == primary_idx:
+            tex_filename = f"{model_name}.png"
+        else:
+            tex_filename = f"{model_name}_{tex_idx}.png"
+        tex_path = os.path.join(pack_root, TEXTURE_DIR, tex_filename)
+        with open(tex_path, "wb") as f:
+            f.write(png_data)
+        log.append(("success", f"✓ Texture → textures/item/{tex_filename}"))
 
     # 2 — Model JSON
     model_json = build_model_json(bbmodel, model_name)
