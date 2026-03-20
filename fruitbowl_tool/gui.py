@@ -726,7 +726,7 @@ class FruitbowlApp:
         for i, m in enumerate(self.manage_models):
             # Filter
             if query:
-                searchable = f"{m['item_type']} {m['model_name']} {m['author']}".lower()
+                searchable = f"{m['item_type']} {m.get('real_item_type', '')} {m['model_name']} {m['author']}".lower()
                 if query not in searchable:
                     continue
 
