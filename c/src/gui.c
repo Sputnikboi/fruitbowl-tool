@@ -248,7 +248,13 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     int dropdown_cy = cy; // remember where dropdown draws
     cy += PAD + 8;        // skip past dropdown area
 
-    // ── Import button (placed well below dropdown) ──────────────────────
+    // ── Output log ──────────────────────────────────────────────────────
+    DrawText("Output", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
+    int log_h = 100;
+    draw_log(&s->log, x + PAD, cy, w - 2*PAD, log_h);
+    cy += log_h + PAD;
+
+    // ── Import button ───────────────────────────────────────────────────
     static double import_cooldown_until = 0.0;
     Rectangle btn_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), BTN_H};
     bool do_import = false;
@@ -326,10 +332,6 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
         }
     }
     cy += FIELD_H + PAD;
-
-    // Log
-    DrawText("Output", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
-    draw_log(&s->log, x + PAD, cy, w - 2*PAD, h - (cy - y) - PAD);
 
     // ── Dropdown overlay (drawn last so it renders on top) ──────────────
     if (s->item_dropdown_open && s->item_suggestion_count > 0) {
