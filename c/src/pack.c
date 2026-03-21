@@ -665,9 +665,30 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
     cJSON *textures = cJSON_GetObjectItem(bb, "textures");
     int tex_count = textures ? cJSON_GetArraySize(textures) : 0;
 
-    // Find which indices are used
-    int primary_idx = 0;
-    int usage[FB_MAX_TEXTURES] = {0};
+    // Build texture id → array index mapping
+    // Blockbench uses texture "id" field in face references, NOT array index
+    int id_to_idx[FB_MAX_TEXTURES];
+    int idx_to_id[FB_MAX_TEXTURES];
+    memset(id_to_idx, -1, sizeof(id_to_idx));
+    memset(idx_to_id, 0, sizeof(idx_to_id));
+    for (int i = 0; i < tex_count && i < FB_MAX_TEXTURES; i++) {
+        cJSON *tex = cJSON_GetArrayItem(textures, i);
+        cJSON *id_val = cJSON_GetObjectItem(tex, "id");
+        // Blockbench texture ids are strings like "0", "1" or ints
+        int tid = i; // fallback to array index
+        if (id_val) {
+            if (cJSON_IsNumber(id_val)) tid = id_val->valueint;
+            else if (cJSON_IsString(id_val)) tid = atoi(id_val->valuestring);
+        }
+        if (tid >= 0 && tid < FB_MAX_TEXTURES) {
+            id_to_idx[tid] = i;
+            idx_to_id[i] = tid;
+        }
+    }
+
+    // Find which texture IDs are used by faces
+    int primary_id = 0;
+    int usage[FB_MAX_TEXTURES] = {0}; // indexed by texture ID
     cJSON *elements = cJSON_GetObjectItem(bb, "elements");
     cJSON *el;
     cJSON_ArrayForEach(el, elements) {
@@ -680,14 +701,19 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
         }
     }
     for (int i = 1; i < FB_MAX_TEXTURES; i++) {
-        if (usage[i] > usage[primary_idx]) primary_idx = i;
+        if (usage[i] > usage[primary_id]) primary_id = i;
     }
 
     const char *b64_prefix = "data:image/png;base64,";
     int prefix_len = (int)strlen(b64_prefix);
 
+    char tex_dir[FB_MAX_PATH];
+    fb_path_join(tex_dir, sizeof(tex_dir), pack_root, FB_TEXTURE_DIR);
+    fb_ensure_dir(tex_dir);
+
     for (int i = 0; i < tex_count && i < FB_MAX_TEXTURES; i++) {
-        if (usage[i] == 0 && i != primary_idx) continue;
+        int tid = idx_to_id[i];
+        if (usage[tid] == 0 && tid != primary_id) continue;
 
         cJSON *tex = cJSON_GetArrayItem(textures, i);
         cJSON *source = cJSON_GetObjectItem(tex, "source");
@@ -699,22 +725,19 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
         if (!png) continue;
 
         char tex_path[FB_MAX_PATH];
-        if (i == primary_idx) {
+        if (tid == primary_id) {
             snprintf(tex_path, sizeof(tex_path), "%s/%s/%s.png", pack_root, FB_TEXTURE_DIR, name);
         } else {
-            snprintf(tex_path, sizeof(tex_path), "%s/%s/%s_%d.png", pack_root, FB_TEXTURE_DIR, name, i);
+            snprintf(tex_path, sizeof(tex_path), "%s/%s/%s_%d.png", pack_root, FB_TEXTURE_DIR, name, tid);
         }
 
-        char tex_dir[FB_MAX_PATH];
-        fb_path_join(tex_dir, sizeof(tex_dir), pack_root, FB_TEXTURE_DIR);
-        fb_ensure_dir(tex_dir);
         fb_write_file(tex_path, (const char *)png, png_len);
         free(png);
 
-        if (i == primary_idx)
+        if (tid == primary_id)
             fb_log(log, FB_LOG_SUCCESS, "Texture -> %s.png", name);
         else
-            fb_log(log, FB_LOG_SUCCESS, "Texture -> %s_%d.png", name, i);
+            fb_log(log, FB_LOG_SUCCESS, "Texture -> %s_%d.png", name, tid);
     }
 
     // 2 — Build and save model JSON
@@ -734,16 +757,16 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
         cJSON_AddItemToArray(ts, cJSON_CreateNumber(th));
     }
 
-    // Texture refs
+    // Texture refs (keyed by texture ID, not array index)
     cJSON *tex_obj = cJSON_AddObjectToObject(out, "textures");
-    for (int i = 0; i < FB_MAX_TEXTURES; i++) {
-        if (usage[i] == 0 && i != primary_idx) continue;
-        if (i >= tex_count) continue;
-        char key[8]; snprintf(key, sizeof(key), "%d", i);
-        if (i == primary_idx) {
+    for (int tid = 0; tid < FB_MAX_TEXTURES; tid++) {
+        if (usage[tid] == 0 && tid != primary_id) continue;
+        if (id_to_idx[tid] < 0) continue; // no texture with this ID
+        char key[8]; snprintf(key, sizeof(key), "%d", tid);
+        if (tid == primary_id) {
             cJSON_AddStringToObject(tex_obj, key, TextFormat("fruitbowl:item/%s", name));
         } else {
-            cJSON_AddStringToObject(tex_obj, key, TextFormat("fruitbowl:item/%s_%d", name, i));
+            cJSON_AddStringToObject(tex_obj, key, TextFormat("fruitbowl:item/%s_%d", name, tid));
         }
     }
     cJSON_AddStringToObject(tex_obj, "particle", TextFormat("fruitbowl:item/%s", name));
