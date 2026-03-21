@@ -183,6 +183,11 @@ typedef struct {
     char        pending_heading_override[FB_MAX_NAME];
     bool        pending_import;  // deferred import waiting for heading name
 
+    // Duplicate dialog
+    bool        dup_dialog_open;
+    char        dup_dialog_value[FB_MAX_NAME];  // target item type
+    int         dup_dialog_entry;               // index of entry being duplicated
+
     // Manage inline author editing
     int         manage_editing_author;  // index being edited, -1 = none
     char        manage_edit_buf[FB_MAX_NAME];

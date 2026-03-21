@@ -636,14 +636,9 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
 
     if (GuiButton((Rectangle){(float)(list_x + 2*(btn_w+PAD)), by, (float)btn_w, BTN_H}, "Duplicate")) {
         if (s->manage_selected >= 0) {
-            FBPackEntry *e = &s->pack_entries[s->manage_selected];
-            fb_log_clear(&s->log);
-            if (s->item_type[0]) {
-                fb_duplicate_to_item(s->pack_path, e->model_name, s->item_type, e->author, &s->log);
-                s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
-            } else {
-                fb_log(&s->log, FB_LOG_WARN, "Enter target item in Import tab's 'Minecraft Item' field");
-            }
+            s->dup_dialog_open = true;
+            s->dup_dialog_entry = s->manage_selected;
+            s->dup_dialog_value[0] = '\0';
         }
     }
 
@@ -1007,6 +1002,54 @@ static void draw_heading_dialog(FBAppState *s, int panel_w) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// Duplicate Dialog (modal overlay)
+// ═════════════════════════════════════════════════════════════════════════════
+
+static bool dup_dlg_edit = false;
+
+static void draw_dup_dialog(FBAppState *s, int panel_w) {
+    int sw = GetScreenWidth(), sh = GetScreenHeight();
+    DrawRectangle(0, 0, sw, sh, (Color){0,0,0,150});
+
+    int dw = (int)(350 * gui_scale), dh = (int)(160 * gui_scale);
+    int dx = (panel_w - dw) / 2, dy = (sh - dh) / 2;
+    DrawRectangle(dx, dy, dw, dh, C_PANEL);
+    DrawRectangleLines(dx, dy, dw, dh, C_BORDER);
+
+    FBPackEntry *e = &s->pack_entries[s->dup_dialog_entry];
+
+    int cy = dy + PAD;
+    DrawText("Duplicate Model", dx + PAD, cy, FONT_TITLE, RAYWHITE); cy += FONT_TITLE + 8;
+    DrawText(TextFormat("Copy '%s' to another item:", e->model_name),
+             dx + PAD, cy, FONT_SMALL, C_DIM); cy += FONT_SMALL + PAD;
+
+    DrawText("Target Item", dx + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
+    Rectangle edit_r = {(float)(dx+PAD), (float)cy, (float)(dw-2*PAD), FIELD_H};
+    if (GuiTextBox(edit_r, s->dup_dialog_value, FB_MAX_NAME, dup_dlg_edit))
+        dup_dlg_edit = !dup_dlg_edit;
+    cy += FIELD_H + PAD;
+
+    int btn_w2 = (dw - 3*PAD) / 2;
+    if (GuiButton((Rectangle){(float)(dx+PAD), (float)cy, (float)btn_w2, BTN_H}, "Duplicate")) {
+        if (s->dup_dialog_value[0]) {
+            fb_log_clear(&s->log);
+            fb_duplicate_to_item(s->pack_path, e->model_name, s->dup_dialog_value, e->author, &s->log);
+            s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
+            s->dup_dialog_open = false;
+            dup_dlg_edit = false;
+        }
+    }
+    if (GuiButton((Rectangle){(float)(dx+2*PAD+btn_w2), (float)cy, (float)btn_w2, BTN_H}, "Cancel")) {
+        s->dup_dialog_open = false;
+        dup_dlg_edit = false;
+    }
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        s->dup_dialog_open = false;
+        dup_dlg_edit = false;
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Main GUI
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -1124,9 +1167,12 @@ void fb_draw_gui(FBAppState *s) {
                 break;
         }
 
-        // Heading name dialog (drawn on top)
+        // Modal dialogs (drawn on top)
         if (s->heading_dialog_open) {
             draw_heading_dialog(s, panel_w);
+        }
+        if (s->dup_dialog_open) {
+            draw_dup_dialog(s, panel_w);
         }
     }
 

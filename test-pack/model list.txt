@@ -18,3 +18,7 @@ Steak:
 
 White Wool:
 1 = Ary Doll (Brok)
+
+
+Carved Pumpkin:
+1 = Sputnikboi (Sputnik)
