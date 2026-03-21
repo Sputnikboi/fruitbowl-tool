@@ -24,6 +24,8 @@
 
 // Scale factor — adjust this to make everything bigger/smaller
 static float gui_scale = 1.3f;
+static bool dup_dlg_edit = false;
+static bool dup_dropdown_open = false;
 
 // Scaled helpers (recomputed each frame for resize support)
 static int PANEL_W, TAB_H, PAD, ROW_H, FIELD_H, BTN_H;
@@ -639,6 +641,13 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
             s->dup_dialog_open = true;
             s->dup_dialog_entry = s->manage_selected;
             s->dup_dialog_value[0] = '\0';
+            dup_dlg_edit = false;
+            dup_dropdown_open = false;
+            // Ensure item suggestions are loaded
+            if (s->item_suggestion_count == 0 && s->pack_path[0]) {
+                s->item_suggestion_count = fb_scan_pack_items(
+                    s->pack_path, s->item_suggestions, FB_MAX_SUGGESTIONS);
+            }
         }
     }
 
@@ -1004,9 +1013,6 @@ static void draw_heading_dialog(FBAppState *s, int panel_w) {
 // ═════════════════════════════════════════════════════════════════════════════
 // Duplicate Dialog (modal overlay)
 // ═════════════════════════════════════════════════════════════════════════════
-
-static bool dup_dlg_edit = false;
-static bool dup_dropdown_open = false;
 
 static void draw_dup_dialog(FBAppState *s, int panel_w) {
     int sw = GetScreenWidth(), sh = GetScreenHeight();
