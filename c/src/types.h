@@ -148,7 +148,9 @@ typedef struct {
     // Pack scan results
     FBPackEntry pack_entries[FB_MAX_MODELS];
     int         pack_entry_count;
-    int         manage_selected;        // index into pack_entries, -1 = none
+    bool        manage_selected[FB_MAX_MODELS]; // multi-select bitmask
+    int         manage_sel_count;       // number of selected items
+    int         manage_sel_last;        // last clicked index (for shift-range), -1 = none
     char        manage_filter[FB_MAX_NAME];
     float       manage_scroll;
     int         manage_sort_col;        // 0=type,1=name,2=threshold,3=author,4=status

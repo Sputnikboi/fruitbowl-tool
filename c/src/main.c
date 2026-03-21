@@ -7,7 +7,7 @@
 
 int main(int argc, char **argv) {
     FBAppState state = {0};
-    state.manage_selected = -1;
+    state.manage_sel_last = -1;
     state.batch_selected = -1;
     state.manage_editing_author = -1;
     state.manage_sort_asc = true;

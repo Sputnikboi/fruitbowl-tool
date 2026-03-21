@@ -467,7 +467,8 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
         fb_log_clear(&s->log);
         s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
         s->pack_scanned = true;
-        s->manage_selected = -1;
+        memset(s->manage_selected, 0, sizeof(s->manage_selected));
+        s->manage_sel_count = 0; s->manage_sel_last = -1;
         fb_log(&s->log, FB_LOG_SUCCESS, "Found %d models", s->pack_entry_count);
     }
     cy += FIELD_H + PAD;
@@ -479,7 +480,8 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
     // Reset scroll when filter changes
     if (strcmp(s->manage_filter, prev_filter) != 0) {
         s->manage_scroll = 0;
-        s->manage_selected = -1;
+        memset(s->manage_selected, 0, sizeof(s->manage_selected));
+        s->manage_sel_count = 0; s->manage_sel_last = -1;
         strncpy(prev_filter, s->manage_filter, FB_MAX_NAME - 1);
     }
     cy += FIELD_H + PAD;
@@ -561,7 +563,7 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
         int ry = cy + row_count * ROW_H;
 
         // Row background
-        bool selected = (s->manage_selected == i);
+        bool selected = s->manage_selected[i];
         bool hovered = CheckCollisionPointRec(GetMousePosition(),
                         (Rectangle){(float)list_x, (float)ry, (float)list_w, ROW_H});
 
@@ -579,13 +581,44 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
             double now = GetTime();
             if (i == last_click_idx && (now - last_click_time) < 0.35 &&
                 mx >= author_x && mx < author_x + col_author) {
-                // Start inline editing
                 s->manage_editing_author = i;
                 strncpy(s->manage_edit_buf, e->author, FB_MAX_NAME - 1);
             }
             last_click_time = now;
             last_click_idx = i;
-            s->manage_selected = i;
+
+            bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+            bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+
+            if (shift && s->manage_sel_last >= 0) {
+                // Range select: find fi range in filtered_indices
+                int last_fi = -1;
+                for (int f = 0; f < filtered_count; f++) {
+                    if (filtered_indices[f] == s->manage_sel_last) { last_fi = f; break; }
+                }
+                if (last_fi >= 0) {
+                    if (!ctrl) {
+                        memset(s->manage_selected, 0, sizeof(s->manage_selected));
+                    }
+                    int lo = last_fi < fi ? last_fi : fi;
+                    int hi = last_fi > fi ? last_fi : fi;
+                    for (int r = lo; r <= hi; r++)
+                        s->manage_selected[filtered_indices[r]] = true;
+                }
+            } else if (ctrl) {
+                // Toggle single
+                s->manage_selected[i] = !s->manage_selected[i];
+            } else {
+                // Normal click — select only this
+                memset(s->manage_selected, 0, sizeof(s->manage_selected));
+                s->manage_selected[i] = true;
+            }
+            s->manage_sel_last = i;
+
+            // Recount
+            s->manage_sel_count = 0;
+            for (int j = 0; j < s->pack_entry_count; j++)
+                if (s->manage_selected[j]) s->manage_sel_count++;
         }
 
         // Columns
@@ -623,8 +656,12 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
     cy += list_h;
 
     // Count display
-    DrawText(TextFormat("%d / %d models", filtered_count, s->pack_entry_count),
-             list_x, cy + 2, 10, C_DIM);
+    if (s->manage_sel_count > 0)
+        DrawText(TextFormat("%d selected — %d / %d models", s->manage_sel_count, filtered_count, s->pack_entry_count),
+                 list_x, cy + 2, 10, C_DIM);
+    else
+        DrawText(TextFormat("%d / %d models", filtered_count, s->pack_entry_count),
+                 list_x, cy + 2, 10, C_DIM);
     cy += 16;
 
     // Action buttons
@@ -635,19 +672,26 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
     btn_w = (list_w - (btn_count - 1) * PAD) / btn_count;
 
     if (GuiButton((Rectangle){(float)list_x, by, (float)btn_w, BTN_H}, "Delete")) {
-        if (s->manage_selected >= 0 && s->manage_selected < s->pack_entry_count) {
-            FBPackEntry *e = &s->pack_entries[s->manage_selected];
+        if (s->manage_sel_count > 0) {
             fb_log_clear(&s->log);
-            fb_log(&s->log, FB_LOG_HEADER, "Deleting %s...", e->model_name);
-            fb_delete_model(s->pack_path, e->real_item_type, e->model_name, e->threshold, &s->log);
+            // Delete in reverse order to avoid index shifting
+            for (int i = s->pack_entry_count - 1; i >= 0; i--) {
+                if (!s->manage_selected[i]) continue;
+                FBPackEntry *e = &s->pack_entries[i];
+                fb_log(&s->log, FB_LOG_HEADER, "Deleting %s...", e->model_name);
+                fb_delete_model(s->pack_path, e->real_item_type, e->model_name, e->threshold, &s->log);
+            }
             s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
-            s->manage_selected = -1;
+            memset(s->manage_selected, 0, sizeof(s->manage_selected));
+            s->manage_sel_count = 0; s->manage_sel_last = -1;
         }
     }
 
     if (GuiButton((Rectangle){(float)(list_x + (btn_w + PAD)), by, (float)btn_w, BTN_H}, "Preview")) {
-        if (s->manage_selected >= 0 && s->pack_path[0]) {
-            FBPackEntry *e = &s->pack_entries[s->manage_selected];
+        int first_sel = -1;
+        for (int i = 0; i < s->pack_entry_count; i++) { if (s->manage_selected[i]) { first_sel = i; break; } }
+        if (first_sel >= 0 && s->pack_path[0]) {
+            FBPackEntry *e = &s->pack_entries[first_sel];
             if (s->preview_loaded) fb_unload_model_textures(&s->preview_model);
             s->preview_loaded = false;
             fb_log_clear(&s->log);
@@ -664,9 +708,11 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
     }
 
     if (GuiButton((Rectangle){(float)(list_x + 2*(btn_w+PAD)), by, (float)btn_w, BTN_H}, "Duplicate")) {
-        if (s->manage_selected >= 0) {
+        int first_sel = -1;
+        for (int i = 0; i < s->pack_entry_count; i++) { if (s->manage_selected[i]) { first_sel = i; break; } }
+        if (first_sel >= 0) {
             s->dup_dialog_open = true;
-            s->dup_dialog_entry = s->manage_selected;
+            s->dup_dialog_entry = first_sel;
             s->dup_dialog_value[0] = '\0';
             dup_dlg_edit = false;
             dup_dropdown_open = false;
@@ -679,18 +725,23 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
     }
 
     if (GuiButton((Rectangle){(float)(list_x + 3*(btn_w+PAD)), by, (float)btn_w, BTN_H}, "Set Author")) {
-        if (s->manage_selected >= 0) {
-            FBPackEntry *e = &s->pack_entries[s->manage_selected];
+        if (s->manage_sel_count > 0) {
             fb_log_clear(&s->log);
-            fb_update_author(s->pack_path, e->real_item_type, e->threshold,
-                             e->display_name, s->author, &s->log);
-            strncpy(e->author, s->author, FB_MAX_NAME - 1);
+            for (int i = 0; i < s->pack_entry_count; i++) {
+                if (!s->manage_selected[i]) continue;
+                FBPackEntry *e = &s->pack_entries[i];
+                fb_update_author(s->pack_path, e->real_item_type, e->threshold,
+                                 e->display_name, s->author, &s->log);
+                strncpy(e->author, s->author, FB_MAX_NAME - 1);
+            }
         }
     }
 
     if (GuiButton((Rectangle){(float)(list_x + 4*(btn_w+PAD)), by, (float)btn_w, BTN_H}, "Update")) {
-        if (s->manage_selected >= 0) {
-            FBPackEntry *e = &s->pack_entries[s->manage_selected];
+        int first_sel = -1;
+        for (int i = 0; i < s->pack_entry_count; i++) { if (s->manage_selected[i]) { first_sel = i; break; } }
+        if (first_sel >= 0) {
+            FBPackEntry *e = &s->pack_entries[first_sel];
             char tmp[FB_MAX_PATH];
             if (fb_pick_bbmodel(tmp, sizeof(tmp))) {
                 fb_log_clear(&s->log);

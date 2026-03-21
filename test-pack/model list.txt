@@ -2,7 +2,6 @@
 
 Golden Carrot:
 
-1 = Ary Doll (Brok)
 
 
 
@@ -12,10 +11,5 @@ Pale Oak Button:
 
 Steak:
 
-1 = Sputnikboi (ada)
 
 White Wool:
-1 = Sour Patch Kids Slant (brok)
-2 = Sputnikboi (sputnik)
-3 = Ary Doll (sad)Carved Pumpkin:
-4 = Alien Antlers 4jay Copy Done (sad)
