@@ -5,77 +5,77 @@
     "entries": [
       {
         "threshold": 1,
-	"model": {
-	  "type": "minecraft:condition",
-	  "property": "minecraft:using_item",
-	  "on_true": {
-	    "type": "minecraft:model",
-	    "model": "fruitbowl:item/emrick_spell_circle_blocking"
-	  },
-	  "on_false": {
-	    "type": "minecraft:model",
-	    "model": "fruitbowl:item/emrick_spell_circle"
-	  }
+        "model": {
+          "type": "minecraft:condition",
+          "property": "minecraft:using_item",
+          "on_true": {
+            "type": "minecraft:model",
+            "model": "fruitbowl:item/emrick_spell_circle_blocking"
+          },
+          "on_false": {
+            "type": "minecraft:model",
+            "model": "fruitbowl:item/emrick_spell_circle"
+          }
         }
       },
       {
         "threshold": 2,
-	"model": {
-	  "type": "minecraft:condition",
-	  "property": "minecraft:using_item",
-	  "on_true": {
-	    "type": "minecraft:model",
-	    "model": "fruitbowl:item/elvish_spell_circle_blocking"
-	  },
-	  "on_false": {
-	    "type": "minecraft:model",
-	    "model": "fruitbowl:item/elvish_spell_circle"
-	  }
+        "model": {
+          "type": "minecraft:condition",
+          "property": "minecraft:using_item",
+          "on_true": {
+            "type": "minecraft:model",
+            "model": "fruitbowl:item/elvish_spell_circle_blocking"
+          },
+          "on_false": {
+            "type": "minecraft:model",
+            "model": "fruitbowl:item/elvish_spell_circle"
+          }
         }
       },
       {
         "threshold": 3,
-	"model": {
-	  "type": "minecraft:condition",
-	  "property": "minecraft:using_item",
-	  "on_true": {
-	    "type": "minecraft:model",
-	    "model": "fruitbowl:item/aria_spell_circle_blocking"
-	  },
-	  "on_false": {
-	    "type": "minecraft:model",
-	    "model": "fruitbowl:item/aria_spell_circle"
-	  }
+        "model": {
+          "type": "minecraft:condition",
+          "property": "minecraft:using_item",
+          "on_true": {
+            "type": "minecraft:model",
+            "model": "fruitbowl:item/aria_spell_circle_blocking"
+          },
+          "on_false": {
+            "type": "minecraft:model",
+            "model": "fruitbowl:item/aria_spell_circle"
+          }
         }
       },
       {
         "threshold": 4,
-	"model": {
-	  "type": "minecraft:condition",
-	  "property": "minecraft:using_item",
-	  "on_true": {
-	    "type": "minecraft:model",
-	    "model": "fruitbowl:item/haunted_spell_circle_blocking"
-	  },
-	  "on_false": {
-	    "type": "minecraft:model",
-	    "model": "fruitbowl:item/haunted_spell_circle"
-	  }
+        "model": {
+          "type": "minecraft:condition",
+          "property": "minecraft:using_item",
+          "on_true": {
+            "type": "minecraft:model",
+            "model": "fruitbowl:item/haunted_spell_circle_blocking"
+          },
+          "on_false": {
+            "type": "minecraft:model",
+            "model": "fruitbowl:item/haunted_spell_circle"
+          }
         }
       },
       {
-        "threshold": 4,
-	"model": {
-	  "type": "minecraft:condition",
-	  "property": "minecraft:using_item",
-	  "on_true": {
-	    "type": "minecraft:model",
-	    "model": "fruitbowl:item/ritual_spell_circle_blocking"
-	  },
-	  "on_false": {
-	    "type": "minecraft:model",
-	    "model": "fruitbowl:item/ritual_spell_circle"
-	  }
+        "threshold": 5,
+        "model": {
+          "type": "minecraft:condition",
+          "property": "minecraft:using_item",
+          "on_true": {
+            "type": "minecraft:model",
+            "model": "fruitbowl:item/ritual_spell_circle_blocking"
+          },
+          "on_false": {
+            "type": "minecraft:model",
+            "model": "fruitbowl:item/ritual_spell_circle"
+          }
         }
       }
     ],
@@ -84,17 +84,17 @@
       "property": "minecraft:using_item",
       "on_true": {
         "type": "minecraft:special",
-	"model": {
-	  "type": "minecraft:shield"
+        "model": {
+          "type": "minecraft:shield"
         },
         "base": "item/shield_blocking"
       },
       "on_false": {
         "type": "minecraft:special",
         "model": {
-	  "type": "minecraft:shield"
-	},
-	"base": "item/shield"
+          "type": "minecraft:shield"
+        },
+        "base": "item/shield"
       }
     }
   }

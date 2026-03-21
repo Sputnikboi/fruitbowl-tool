@@ -8,6 +8,18 @@
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <math.h>
+
+// Round to 4 decimal places (matches Python's round(val, 4))
+static double round4(double v) {
+    return round(v * 10000.0) / 10000.0;
+}
+static cJSON *cJSON_CreateRoundedArray(const float *arr, int count) {
+    cJSON *a = cJSON_CreateArray();
+    for (int i = 0; i < count; i++)
+        cJSON_AddItemToArray(a, cJSON_CreateNumber(round4((double)arr[i])));
+    return a;
+}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Constants / Lookups
@@ -706,9 +718,11 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
     cJSON *res = cJSON_GetObjectItem(bb, "resolution");
     int tw = res ? cJSON_GetObjectItem(res, "width")->valueint : 16;
     int th = res ? cJSON_GetObjectItem(res, "height")->valueint : 16;
-    cJSON *ts = cJSON_AddArrayToObject(out, "texture_size");
-    cJSON_AddItemToArray(ts, cJSON_CreateNumber(tw));
-    cJSON_AddItemToArray(ts, cJSON_CreateNumber(th));
+    if (tw != 16 || th != 16) {
+        cJSON *ts = cJSON_AddArrayToObject(out, "texture_size");
+        cJSON_AddItemToArray(ts, cJSON_CreateNumber(tw));
+        cJSON_AddItemToArray(ts, cJSON_CreateNumber(th));
+    }
 
     // Texture refs
     cJSON *tex_obj = cJSON_AddObjectToObject(out, "textures");
@@ -730,17 +744,17 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
         FBElement *e = &model.elements[i];
         cJSON *ej = cJSON_CreateObject();
 
-        cJSON *from_a = cJSON_CreateFloatArray(e->from, 3);
-        cJSON *to_a = cJSON_CreateFloatArray(e->to, 3);
+        cJSON *from_a = cJSON_CreateRoundedArray(e->from, 3);
+        cJSON *to_a = cJSON_CreateRoundedArray(e->to, 3);
         cJSON_AddItemToObject(ej, "from", from_a);
         cJSON_AddItemToObject(ej, "to", to_a);
 
         if (e->rot_axis) {
             cJSON *rot = cJSON_AddObjectToObject(ej, "rotation");
-            cJSON_AddNumberToObject(rot, "angle", e->rot_angle);
+            cJSON_AddNumberToObject(rot, "angle", round4(e->rot_angle));
             char axis_str[2] = {e->rot_axis, '\0'};
             cJSON_AddStringToObject(rot, "axis", axis_str);
-            cJSON *orig = cJSON_CreateFloatArray(e->rot_origin, 3);
+            cJSON *orig = cJSON_CreateRoundedArray(e->rot_origin, 3);
             cJSON_AddItemToObject(rot, "origin", orig);
         }
 
@@ -750,7 +764,7 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
             FBFace *f = &e->faces[fi];
             if (!f->has_texture) continue;
             cJSON *fj = cJSON_CreateObject();
-            cJSON *uv = cJSON_CreateFloatArray(f->uv, 4);
+            cJSON *uv = cJSON_CreateRoundedArray(f->uv, 4);
             cJSON_AddItemToObject(fj, "uv", uv);
             cJSON_AddStringToObject(fj, "texture", TextFormat("#%d", f->texture_idx));
             if (f->rotation) cJSON_AddNumberToObject(fj, "rotation", f->rotation);

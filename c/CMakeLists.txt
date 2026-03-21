@@ -35,7 +35,7 @@ target_include_directories(fruitbowl_tool PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(fruitbowl_tool PRIVATE raylib)
+target_link_libraries(fruitbowl_tool PRIVATE raylib m)
 
 # ── Windows: don't open a console window ─────────────────────────────────────
 if(WIN32)

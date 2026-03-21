@@ -49,6 +49,13 @@
           "type": "minecraft:model",
           "model": "fruitbowl:item/ary_bag"
         }
+      },
+      {
+        "threshold": 7,
+        "model": {
+          "type": "minecraft:model",
+          "model": "fruitbowl:item/sour_patch_kids_slant"
+        }
       }
     ]
   }

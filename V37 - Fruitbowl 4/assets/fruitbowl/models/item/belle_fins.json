@@ -1,0 +1,44 @@
+{
+	"format_version": "1.21.6",
+	"credit": "Made with Blockbench",
+	"textures": {
+		"2": "fruitbowl:item/belle_fins",
+		"particle": "fruitbowl:item/belle_fins"
+	},
+	"elements": [
+		{
+			"name": "left fin",
+			"from": [4, 1, 4.75],
+			"to": [4, 6, 10.75],
+			"rotation": {"angle": -22.5, "axis": "y", "origin": [3, 2, 5.75]},
+			"faces": {
+				"north": {"uv": [0, 0, 0, 6], "texture": "#2"},
+				"east": {"uv": [6, 0, 12, 5], "texture": "#2"},
+				"south": {"uv": [0, 0, 0, 6], "texture": "#2"},
+				"west": {"uv": [0, 0, 6, 5], "texture": "#2"},
+				"up": {"uv": [0, 0, 0, 6], "texture": "#2"},
+				"down": {"uv": [0, 0, 0, 6], "texture": "#2"}
+			}
+		},
+		{
+			"name": "right fin",
+			"from": [12, 1, 4.75],
+			"to": [12, 6, 10.75],
+			"rotation": {"angle": 22.5, "axis": "y", "origin": [13, 2, 5.75]},
+			"faces": {
+				"north": {"uv": [0, 0, 0, 5], "texture": "#2"},
+				"east": {"uv": [6, 0, 12, 5], "texture": "#2"},
+				"south": {"uv": [0, 0, 0, 5], "texture": "#2"},
+				"west": {"uv": [0, 0, 6, 5], "texture": "#2"},
+				"up": {"uv": [0, 0, 0, 6], "texture": "#2"},
+				"down": {"uv": [0, 0, 0, 6], "texture": "#2"}
+			}
+		}
+	],
+	"display": {
+		"head": {
+			"translation": [0, 6.5, 0.75],
+			"scale": [1.65, 1.65, 1.65]
+		}
+	}
+}

@@ -1,0 +1,359 @@
+Stone Button:
+1 = Jets Helm (Ness)
+2 = Reeds Hat (Brok)
+3 = Arys Bag (Brok)
+4 = Percys Hat (Brok - Ant)
+5 = Dustin Hat (Brok - Dusty)
+6 = Penelope (Brok)
+7 = Alien Antlers (Brok - Jay)
+8 = Pin Cushion Hat
+9 = Flower Crown (Ness)
+10 = Medical Mask
+11 = Belles Fins (Belle)
+12 = witch Violet hat (Mixana)
+13 = Muntjac Antlers (Brok - Monarch)
+14 = Goat Horns (the GOATS)
+15 = Jets Jacket (Ness)
+16 = Mana Anchor (Mag)
+17 = Pixie Pink (Mag)
+18 = Pixie Red (Mag)
+19 = Pixie Orange (Mag)
+20 = Pixie Yellow (Mag)
+21 = Pixie Lime (Mag)
+22 = Pixie Green (Mag)
+23 = Pixie Cyan (Mag)
+24 = Pixie Light Blue (Mag)
+25 = Pixie Blue (Mag)
+26 = Pixie Purple (Mag)
+27 = Pixie Magenta (Mag)
+28 = Pixie White (Mag)
+29 = Pixie Light Gray (Mag)
+30 = Pixie Gray (Mag)
+31 = Pixie Black (Mag)
+32 = Pixie Brown (Mag)
+33 = Beret (Ness - Nad)
+34 = Emricks Antlers (Mag)
+35 = Spirit Companion Water (Mag)
+36 = Jynxs Hair Stuff (Belle)
+37 = Unicorn horn (Emdi)
+38 = Unicorn horn blood (Emdi)
+39 = Cow Skull (Emdi)
+40 = Lyris Antennae (Belle - Winter)
+41 = Styracosaurus Skull (Emdi)
+42 = Mothman Hat (Brok)
+43 = Mothman Hat Base (Brok)
+44 = Percy HW Hat (Brok - Ant)
+45 = Drowned Fins (Belle)
+46 = Snow Jelly Hat (Snow)
+47 = Axolotl Hat Pink (Ash)
+48 = Axolotl Hat Cyan (Ash)
+49 = Axolotl Hat Fantst (Ash)
+50 = Axolotl Hat Blue (Ash)
+51 = Blossom Hat (Ash)
+52 = Green Scarf (Brok)
+53 = Red Scarf (Brok)
+54 = Yellow Scarf (Brok)
+55 = Green Striped Scarf (Brok)
+56 = Striped Scarf (Brok)
+57 = Reed Christmas Hat (Brok)
+58 = Antlers (s2 model)
+59 = Antlers w/ nose (s2 model)
+60 = Elf Hat (s2 model)
+61 = Gnome Hat (s3 model)
+62 = Holly Berry (s3 model)
+63 = Santa Hat (s2 model)
+64 = Santa Hat w/ elf ears (s2 model)
+65 = Santa Hat w/ antlers (s2 model)
+66 = Mistletoe (Brok)
+67 = Jet's Hood (Ness)
+68 = Chef Hat (Brok)
+69 = Sharkfin (Brok)
+70 = Eliel Halo (Will)
+
+
+Diamond/Netherite Sword:
+1 = Spectral Blade (Ness)
+2 = Barbed Wire Bat (Brok - Monarch)
+3 = Stingray Dagger (Snow)
+4 = Stingray Sword (Snow)
+5 = Scythe (Mixana)
+6 = JosevArm (Mixana - Josev)
+7 = Seafarer's Dagger (Belle)
+8 = Flora Sickle (Brok)
+9 = Staff (Ash)
+10 = Guitar (Mixana)
+
+
+Wooden Sword:
+1 = Percy's Stake (Brok - Ant)
+2 = Fire Extinguisher (Brok)
+
+
+Bow:
+1 = Rocket Gun (Brok)
+2 = Emricks Staff (Mag)
+
+
+Totem:
+1 = yippeee
+2 = efo (Ness)
+3 = Pearl Bracelet (Belle)
+4 = void??? (Mixana)
+
+Goat Horn:
+1 = Kazoo (Ness)
+2 = Flute (Belle)
+
+
+Apple:
+1 = Kiwifruit (Belle)
+
+
+Steak:
+1 = Beef Jerky (Ness)
+2 = Mozzarella String Cheese (Belle - Monarch)
+3 = Hampter (Brok)...(edible per request)
+4 = Chef Hampter (Brok)
+5 = Hampter Two (Brok)
+6 = Ham (Brok)
+
+
+Book and Quill:
+1 = Uno Rulebook (Brok)
+2 = Art Deco Sketchbook (Mag)
+
+
+Shovel:
+1 = Spectral Shovel (Ness)
+
+
+Axe:
+1 = Spectral Axe (Ness)
+
+
+Pickaxe:
+1 = Spectral Pickaxe (Ness)
+
+
+Cookie:
+1 = (surprise)
+2 = Box of Chocolates (Brok)
+3 = Open Box of Chocolates (Brok)
+
+
+Shield:
+1 = Emricks Spell Circle (Mag)
+2 = Elvish Spell Circle (Mag)
+3 = Arias Spell Circle (Mag - Anima)
+4 = Haunted Spell Circle (Mag)
+5 = Ritual Spell Circle (Mag)
+
+
+Trident:
+1 = Might of the Ocean (Belle)
+2 = Raintwister (Snow)
+3 = Reeds Trident (Brok)
+4 = Dusts Spear (Brok - Dusty)
+
+
+Stick:
+1 = Blank Blackboard (Mag)
+2 = Periodic Blackboard (Mag)
+3 = Flower (Brok)
+4 = Lilypad (Brok)
+
+
+Elytra:
+1 = Jynxs Wings (Belle)
+2 = Reeds Wings (Brok)
+3 = Invisible Elytra (Belle)
+4 = Belles Elytra (Belle)
+5 = Flying Fish (Snow)
+6 = Jetpack (Ness)
+7 = Mothman Wings (Brok)
+8 = Snow Jelly Wings (Snow)
+9 = Lena Wings (Deya - Noa)
+10 = Alizeti Wings (Deya)
+11 = Ginger Wings (Ness - Ginger)
+12 = Jaes Jetpack (Ness - Jae)
+
+
+Baked Potato:
+1 = Cheddar String Cheese (Belle - Monarch)
+
+
+Golden Carrot:
+1 = Kiwifruit (Belle)
+2 = Marble String Cheese (Belle - Monarch)
+
+
+Feather:
+1 = Emdi Unicorn Tail (Brok - Emdi)
+2 = Blank Blackboard (Mag)
+3 = Saltine Cracker (Belle)
+4 = Flower (Brok)
+5 = Lilypad (Brok)
+6 = Whiteboard (Brok)
+7 = Camera (Ness)
+8 = Pink Balloon (Emdi)
+9 = Yellow Balloon (Emdi)
+10 = Green Balloon (Emdi)
+11 = Blue Balloon (Emdi)
+12 = Balloon Cluster (Emdi)
+13 = Jrool Balloon (Emdi)
+14 = Heart Balloon 1 (Brok)
+15 = Heart Balloon 2 (Brok)
+16 = Heart Balloon 3 (Brok)
+17 = Heart Balloon Cluster (Brok)
+18 = Flower Crown (Ness)
+
+
+Carved Pumpkin:
+1 = Short Pumpkin (Emdi)
+2 = Tall Pumpkin (Emdi)
+3 = Wemmbu Pumpkin (Ash)
+4 = Boosfer Pumpkin (Ash)
+5 = Belle Short Pumpkin (Belle)
+6 = Belle Tall Pumpkin (Belle)
+7 = Hikaru Pumpkin (Hikaru)
+8 = Emdi Short Pumpkin (Emdi)
+9 = Emdi Tall Pumpkin (Emdi)
+10 = Snow Tall Pumpkin (Snow)
+11 = White Pumpkin (Brok)
+12 = Brok White Pumpkin (Brok)
+
+
+Bundle:
+1 = Candy Basket (Brok)
+2 = Empty Basket (Brok)
+3 = Pumpkin Basket (s2 model)
+4 = Gtwscar Basket (s2 model)
+5 = Pickle Jar (Emdi)
+6 = Arys Bag (Brok)
+
+
+White Wool:
+1 = Doll Base (Brok)
+2 = Doll Pile (Brok)
+3 = Laying Doll (Brok)
+4 = Fallen Doll (Brok)
+5 = Reed Doll (Brok)
+6 = Kite Doll (Brok - Hearth)
+7 = Ary Doll (Brok)
+8 = Humarr Doll (Brok)
+9 = Belle Doll (Belle)
+10 = Ryder Doll (Ness)
+11 = Bike Lego (Ness)
+12 = Bike (Ness)
+13 = Jynx Doll (Belle)
+14 = Wemmbu Doll (Ash)
+15 = Violet Doll (Mixana)
+16 = Abolish Doll (Mixana)
+17 = Mix Doll (Mixana)
+18 = PrinceZam Doll (Brok - Ash)
+19 = Etern4l Doll (Brok - Ash)
+20 = Jae Doll (Brok - Jae)
+21 = Ayliu Doll (Brok - Jay)
+22 = Jet Doll (Brok - Ness)
+23 = Josev Doll (Brok - Josev)
+24 = Vampire Josev Doll (Brok - Josev)
+25 = VSMP Avid Doll (Brok - Anima)
+26 = Hampter (Brok)
+27 = Teddy Bear (Brok)
+28 = Hampter 2 (Brok)
+29 = Will Doll (Brok - Will)
+30 = Cinfral Doll (Brok - Monarch)
+31 = Feinberg Doll (Brok)
+32 = Ruden Doll (Brok - Ruden)
+33 = Arbazzu Doll (Brok - Arbazzu)
+34 = Harvey Toy (Brok - Harvey)
+35 = Snow Plush (Brok - Snow)
+36 = Chef Hampter (Brok)
+37 = Mumbo Toy (Brok - Harvey)
+
+
+
+Milk Bucket:
+1 = Hot Chocolate (s2 model)
+
+
+Snowball:
+1 = Brick (Brok)
+2 = Rotten Tomato (Brok)
+
+
+Salmon:
+1 = Fish Trophy (Snow)
+
+
+Diamond/Netherite Spear:
+1 = Spectral Blade (Ness)
+2 = Dusts Spear (Brok - Dusty)
+
+Leather Helmet:
+1 = Test Alien Antlers (test)
+2 = Test Reed Hat (test)
+
+
+Clay Ball:
+
+
+Diamond Hoe:
+
+
+Diamond Helmet:
+
+
+Chainmail Helmet:
+14 = Goat Horns
+3 = Arys Bag
+
+
+Leather:
+1 = Doll Base (Brok)
+2 = Doll Pile (Brok)
+3 = Laying Doll (Brok)
+4 = Fallen Doll (Brok)
+5 = Reed Doll (Brok)
+6 = Kite Doll (Brok - Hearth)
+7 = Ary Doll (Brok)
+8 = Humarr Doll (Brok)
+9 = Belle Doll (Belle)
+10 = Ryder Doll (Ness)
+11 = Bike Lego (Ness)
+12 = Bike (Ness)
+13 = Jynx Doll (Belle)
+14 = Wemmbu Doll (Ash)
+15 = Violet Doll (Mixana)
+16 = Abolish Doll (Mixana)
+17 = Mix Doll (Mixana)
+18 = PrinceZam Doll (Brok - Ash)
+19 = Etern4l Doll (Brok - Ash)
+20 = Jae Doll (Brok - Jae)
+21 = Ayliu Doll (Brok - Jay)
+22 = Jet Doll (Brok - Ness)
+23 = Josev Doll (Brok - Josev)
+24 = Vampire Josev Doll (Brok - Josev)
+25 = VSMP Avid Doll (Brok - Anima)
+26 = Hampter (Brok)
+27 = Teddy Bear (Brok)
+28 = Hampter 2 (Brok)
+29 = Will Doll (Brok - Will)
+30 = Cinfral Plush (Brok - Monarch)
+31 = Feinberg Doll (Brok)
+32 = Ruden Doll (Brok - Ruden)
+33 = Arbazzu Doll (Brok - Arbazzu)
+34 = Harvey Toy (Brok - Harvey)
+35 = Snow Plush (Brok - Snow)
+36 = Chef Hampter (Brok)
+37 = Mumbo Toy (Brok - Harvey)
+38 = Emrick Plush (Brok - Mag)
+39 = Elodie Plush (Brok - Emdi)
+40 = Koneko-chan Plush (Brok - Harvey)
+
+
+Pale Oak Button:
+1 = ??? (Sputnik)
+2 = ??? (Sputnik)
+3 = ??? (Sputnik)
+4 = ??? (Sputnik)

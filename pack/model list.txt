@@ -6,7 +6,6 @@ Stone Button:
 5 = Dustin Hat (Brok - Dusty)
 6 = Penelope (Brok)
 7 = Alien Antlers (Brok - Jay)
-8 = Pin Cushion Hat
 9 = Flower Crown (Ness)
 10 = Medical Mask
 11 = Belles Fins (Belle)
@@ -115,7 +114,6 @@ Steak:
 3 = Hampter (Brok)...(edible per request)
 4 = Chef Hampter (Brok)
 5 = Hampter Two (Brok)
-6 = Ham (Brok)
 
 
 Book and Quill:
@@ -185,12 +183,14 @@ Baked Potato:
 Golden Carrot:
 1 = Kiwifruit (Belle)
 2 = Marble String Cheese (Belle - Monarch)
+3 = Saltine Cracker (Belle)
+4 = Sour Patch Kids Slant (Snow)
 
 
 Feather:
 1 = Emdi Unicorn Tail (Brok - Emdi)
 2 = Blank Blackboard (Mag)
-3 = Saltine Cracker (Belle)
+3 = Periodic Blackboard (Mag)
 4 = Flower (Brok)
 5 = Lilypad (Brok)
 6 = Whiteboard (Brok)
@@ -230,6 +230,7 @@ Bundle:
 4 = Gtwscar Basket (s2 model)
 5 = Pickle Jar (Emdi)
 6 = Arys Bag (Brok)
+7 = Sour Patch Kids Slant (Snow)
 
 
 White Wool:

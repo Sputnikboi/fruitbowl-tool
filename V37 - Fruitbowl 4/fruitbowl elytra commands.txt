@@ -1,0 +1,47 @@
+1) Jynx's Wings:
+/give @p minecraft:elytra[minecraft:item_model="fruitbowl:jynx_wings", minecraft:equippable={slot:"chest", asset_id:"fruitbowl:jynx_wings"}]
+
+
+2) Reed's Wings:
+/give @p minecraft:elytra[minecraft:item_model="fruitbowl:reed_wings", minecraft:equippable={slot:"chest", asset_id:"fruitbowl:reed_wings"}]
+
+
+3) Invisible Elytra:
+/give @p minecraft:elytra[minecraft:item_model="fruitbowl:invis_elytra", minecraft:equippable={slot:"chest", asset_id:"fruitbowl:invis_elytra"}]
+
+
+4) Belle's Elytra:
+/give @p minecraft:elytra[minecraft:item_model="fruitbowl:belle_elytra", minecraft:equippable={slot:"chest", asset_id:"fruitbowl:belle_elytra"}]
+
+
+5) Flying Fish:
+/give @p minecraft:elytra[minecraft:item_model="fruitbowl:snow_wings", minecraft:equippable={slot:"chest", asset_id:"fruitbowl:snow_wings"}]
+
+
+6) Jetpack:
+/give @p minecraft:elytra[minecraft:item_model="fruitbowl:jetpack", minecraft:equippable={slot:"chest", asset_id:"fruitbowl:jetpack"}]
+
+
+7) Mothman Wings:
+/give @p minecraft:elytra[minecraft:item_model="fruitbowl:mothman_wings", minecraft:equippable={slot:"chest", asset_id:"fruitbowl:mothman_wings"}]
+
+
+8) Snow Jelly Wings:
+/give @p minecraft:elytra[minecraft:item_model="fruitbowl:snow_jelly_wings", minecraft:equippable={slot:"chest", asset_id:"fruitbowl:snow_jelly_wings"}]
+
+
+9) Lena Wings:
+/give @p minecraft:elytra[minecraft:item_model="fruitbowl:lena_wings", minecraft:equippable={slot:"chest", asset_id:"fruitbowl:lena_wings"}]
+
+
+10) Alizeti Wings:
+/give @p minecraft:elytra[minecraft:item_model="fruitbowl:alizeti_wings", minecraft:equippable={slot:"chest", asset_id:"fruitbowl:alizeti_wings"}]
+
+
+11) Ginger Wings:
+/give @p minecraft:elytra[minecraft:item_model="fruitbowl:ginger_wings", minecraft:equippable={slot:"chest", asset_id:"fruitbowl:ginger_wings"}]
+
+
+12) Jae's Jetpack
+/give @p minecraft:elytra[minecraft:item_model="fruitbowl:jae_jetpack", minecraft:equippable={slot:"chest", asset_id:"fruitbowl:jae_jetpack"}]
+
