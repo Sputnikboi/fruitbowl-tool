@@ -1167,6 +1167,7 @@ static void draw_dup_dialog(FBAppState *s, int panel_w) {
             if (CheckCollisionPointRec(GetMousePosition(), dr)) {
                 strncpy(s->dup_dialog_value, s->item_suggestions[dd_indices[di]], FB_MAX_NAME - 1);
                 dup_dropdown_open = false;
+                dup_dlg_edit = false;
                 dd_clicked = true;
                 break;
             }
@@ -1181,10 +1182,6 @@ static void draw_dup_dialog(FBAppState *s, int panel_w) {
             dup_dropdown_open = true;
         if (dup_dlg_edit && !s->dup_dialog_value[0])
             dup_dropdown_open = false;
-        // Only close dropdown if clicked outside both field and dropdown area
-        if (!dup_dlg_edit && was_edit && !dup_dropdown_open) {
-            // textbox lost focus normally
-        }
     }
     cy = dd_y; // move cy past the field
 
