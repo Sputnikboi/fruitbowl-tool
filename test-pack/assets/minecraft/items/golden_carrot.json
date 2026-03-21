@@ -19,6 +19,12 @@
 					"type":	"minecraft:model",
 					"model":	"fruitbowl:item/saltine_cracker"
 				}
+			}, {
+				"threshold":	3,
+				"model":	{
+					"type":	"minecraft:model",
+					"model":	"fruitbowl:item/sputnikboi"
+				}
 			}]
 	}
 }

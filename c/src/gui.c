@@ -1006,12 +1006,13 @@ static void draw_heading_dialog(FBAppState *s, int panel_w) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 static bool dup_dlg_edit = false;
+static bool dup_dropdown_open = false;
 
 static void draw_dup_dialog(FBAppState *s, int panel_w) {
     int sw = GetScreenWidth(), sh = GetScreenHeight();
     DrawRectangle(0, 0, sw, sh, (Color){0,0,0,150});
 
-    int dw = (int)(350 * gui_scale), dh = (int)(160 * gui_scale);
+    int dw = (int)(350 * gui_scale), dh = (int)(220 * gui_scale);
     int dx = (panel_w - dw) / 2, dy = (sh - dh) / 2;
     DrawRectangle(dx, dy, dw, dh, C_PANEL);
     DrawRectangleLines(dx, dy, dw, dh, C_BORDER);
@@ -1025,27 +1026,95 @@ static void draw_dup_dialog(FBAppState *s, int panel_w) {
 
     DrawText("Target Item", dx + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
     Rectangle edit_r = {(float)(dx+PAD), (float)cy, (float)(dw-2*PAD), FIELD_H};
-    if (GuiTextBox(edit_r, s->dup_dialog_value, FB_MAX_NAME, dup_dlg_edit))
-        dup_dlg_edit = !dup_dlg_edit;
-    cy += FIELD_H + PAD;
 
+    // Check dropdown hit BEFORE textbox (same pattern as import tab)
+    bool dd_clicked = false;
+    if (dup_dropdown_open && s->item_suggestion_count > 0) {
+        char needle[FB_MAX_NAME];
+        strncpy(needle, s->dup_dialog_value, sizeof(needle) - 1);
+        needle[sizeof(needle)-1] = '\0';
+        for (char *p = needle; *p; p++) if (*p >= 'A' && *p <= 'Z') *p += 32;
+
+        int dd_max = 6, dd_count = 0, dd_indices[FB_MAX_SUGGESTIONS];
+        for (int i = 0; i < s->item_suggestion_count && dd_count < dd_max; i++) {
+            if (!needle[0] || strstr(s->item_suggestions[i], needle))
+                dd_indices[dd_count++] = i;
+        }
+        int dd_y = cy + (int)FIELD_H;
+        for (int di = 0; di < dd_count; di++) {
+            Rectangle dr = {(float)(dx+PAD), (float)(dd_y + di * ROW_H),
+                            (float)(dw-2*PAD), (float)ROW_H};
+            if (CheckCollisionPointRec(GetMousePosition(), dr) && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                strncpy(s->dup_dialog_value, s->item_suggestions[dd_indices[di]], FB_MAX_NAME - 1);
+                dup_dropdown_open = false;
+                dd_clicked = true;
+                break;
+            }
+        }
+    }
+
+    if (!dd_clicked) {
+        bool was_edit = dup_dlg_edit;
+        if (GuiTextBox(edit_r, s->dup_dialog_value, FB_MAX_NAME, dup_dlg_edit))
+            dup_dlg_edit = !dup_dlg_edit;
+        if (dup_dlg_edit && s->dup_dialog_value[0])
+            dup_dropdown_open = true;
+        if (!dup_dlg_edit && was_edit)
+            dup_dropdown_open = false;
+    }
+    cy += FIELD_H;
+
+    // Draw dropdown overlay
+    if (dup_dropdown_open && s->item_suggestion_count > 0) {
+        char needle[FB_MAX_NAME];
+        strncpy(needle, s->dup_dialog_value, sizeof(needle) - 1);
+        needle[sizeof(needle)-1] = '\0';
+        for (char *p = needle; *p; p++) if (*p >= 'A' && *p <= 'Z') *p += 32;
+
+        int dd_max = 6, dd_count = 0, dd_indices[FB_MAX_SUGGESTIONS];
+        for (int i = 0; i < s->item_suggestion_count && dd_count < dd_max; i++) {
+            if (!needle[0] || strstr(s->item_suggestions[i], needle))
+                dd_indices[dd_count++] = i;
+        }
+        if (dd_count > 0) {
+            int dd_h = dd_count * ROW_H;
+            DrawRectangle(dx+PAD, cy, dw-2*PAD, dd_h, (Color){25,25,28,245});
+            DrawRectangleLines(dx+PAD, cy, dw-2*PAD, dd_h, C_BORDER);
+            for (int di = 0; di < dd_count; di++) {
+                int ddy = cy + di * ROW_H;
+                Rectangle dr = {(float)(dx+PAD), (float)ddy, (float)(dw-2*PAD), (float)ROW_H};
+                bool dhov = CheckCollisionPointRec(GetMousePosition(), dr);
+                if (dhov) DrawRectangleRec(dr, C_ROW_HOVER);
+                DrawText(s->item_suggestions[dd_indices[di]], dx+PAD+6,
+                         ddy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, dhov ? RAYWHITE : C_TEXT);
+            }
+        } else {
+            dup_dropdown_open = false;
+        }
+    }
+
+    // Buttons at bottom of dialog
+    int btn_y = dy + dh - BTN_H - PAD;
     int btn_w2 = (dw - 3*PAD) / 2;
-    if (GuiButton((Rectangle){(float)(dx+PAD), (float)cy, (float)btn_w2, BTN_H}, "Duplicate")) {
+    if (GuiButton((Rectangle){(float)(dx+PAD), (float)btn_y, (float)btn_w2, BTN_H}, "Duplicate")) {
         if (s->dup_dialog_value[0]) {
             fb_log_clear(&s->log);
             fb_duplicate_to_item(s->pack_path, e->model_name, s->dup_dialog_value, e->author, &s->log);
             s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
             s->dup_dialog_open = false;
             dup_dlg_edit = false;
+            dup_dropdown_open = false;
         }
     }
-    if (GuiButton((Rectangle){(float)(dx+2*PAD+btn_w2), (float)cy, (float)btn_w2, BTN_H}, "Cancel")) {
+    if (GuiButton((Rectangle){(float)(dx+2*PAD+btn_w2), (float)btn_y, (float)btn_w2, BTN_H}, "Cancel")) {
         s->dup_dialog_open = false;
         dup_dlg_edit = false;
+        dup_dropdown_open = false;
     }
     if (IsKeyPressed(KEY_ESCAPE)) {
         s->dup_dialog_open = false;
         dup_dlg_edit = false;
+        dup_dropdown_open = false;
     }
 }
 
