@@ -13,6 +13,12 @@
 					"type":	"minecraft:model",
 					"model":	"fruitbowl:item/sour_patch_kids_slant"
 				}
+			}, {
+				"threshold":	2,
+				"model":	{
+					"type":	"minecraft:model",
+					"model":	"fruitbowl:item/saltine_cracker"
+				}
 			}]
 	}
 }

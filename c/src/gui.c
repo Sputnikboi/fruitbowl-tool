@@ -245,6 +245,10 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     cy += FIELD_H;
 
     // Dropdown suggestions (drawn below the item field, overlapping other content)
+    static bool dropdown_clicked_this_frame = false;
+    static double import_cooldown_until = 0.0;
+    dropdown_clicked_this_frame = false;
+
     if (s->item_dropdown_open && s->item_suggestion_count > 0) {
         char needle[FB_MAX_NAME];
         strncpy(needle, s->item_type, sizeof(needle) - 1); needle[sizeof(needle)-1] = '\0';
@@ -267,6 +271,8 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
                 Rectangle dr = {(float)(x+PAD), (float)dy, (float)(w-2*PAD), (float)ROW_H};
                 bool dhov = CheckCollisionPointRec(GetMousePosition(), dr);
                 if (dhov) DrawRectangleRec(dr, C_ROW_HOVER);
+                if (dhov && IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
+                    dropdown_clicked_this_frame = true;
                 DrawText(s->item_suggestions[dd_indices[di]], x+PAD+6,
                          dy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, dhov ? RAYWHITE : C_TEXT);
             }
@@ -277,12 +283,11 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     }
     cy += PAD + 8;
 
-    // Import button
+    // Import button (suppressed by dropdown click or cooldown)
     Rectangle btn_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), BTN_H};
-    static bool import_btn_was_pressed = false;
     bool import_btn_now = GuiButton(btn_r, "Add to Pack");
-    bool do_import = import_btn_now && !import_btn_was_pressed;
-    import_btn_was_pressed = import_btn_now;
+    bool do_import = import_btn_now && !dropdown_clicked_this_frame
+                     && GetTime() > import_cooldown_until;
     // Also handle pending import (after heading dialog completes)
     if (s->pending_import && !s->heading_dialog_open) {
         do_import = true;
@@ -311,6 +316,7 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
             fb_add_to_pack(s->bbmodel_path, s->pack_path, s->item_type,
                            name, s->author, heading, &s->log);
             s->pending_heading_override[0] = '\0';
+            import_cooldown_until = GetTime() + 1.0; // 1s lockout
             // Auto-rescan
             s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
             s->pack_scanned = true;
