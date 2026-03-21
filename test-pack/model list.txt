@@ -15,6 +15,7 @@ Steak:
 1 = Sputnikboi (ada)
 
 White Wool:
-
-
-Carved Pumpkin:
+1 = Sour Patch Kids Slant (brok)
+2 = Sputnikboi (sputnik)
+3 = Ary Doll (sad)Carved Pumpkin:
+4 = Alien Antlers 4jay Copy Done (sad)

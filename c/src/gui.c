@@ -294,6 +294,7 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
             s->pending_import = true;
         } else {
             // Open confirmation dialog
+            s->confirm_mode = 0;
             const char *name = s->model_name[0] ? s->model_name : NULL;
             // Derive model name from bbmodel filename if not set
             char derived_name[FB_MAX_NAME];
@@ -331,7 +332,6 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
                     free(fc);
                 }
             }
-            s->confirm_is_batch = false;
             s->confirm_dialog_open = true;
             import_cooldown_until = GetTime() + 1.0;
         }
@@ -963,16 +963,18 @@ static void draw_batch_tab(FBAppState *s, int x, int y, int w, int h) {
         } else if (s->batch_count == 0) {
             fb_log(&s->log, FB_LOG_WARN, "No files to import");
         } else {
-            for (int i = 0; i < s->batch_count; i++) {
-                FBBatchEntry *be = &s->batch_entries[i];
-                fb_log(&s->log, FB_LOG_HEADER, "Importing %s...", be->display_name);
-                const char *heading = fb_custom_heading_for(s->item_type, s->custom_headings, s->custom_heading_count);
-                fb_add_to_pack(be->path, s->pack_path, s->item_type,
-                               be->display_name, be->author, heading, &s->log);
-            }
-            fb_log(&s->log, FB_LOG_SUCCESS, "Batch import complete (%d files)", s->batch_count);
-            s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
-            s->pack_scanned = true;
+            // Open confirmation dialog for batch
+            s->confirm_mode = 1;
+            strncpy(s->confirm_item_type, s->item_type, FB_MAX_NAME - 1);
+            s->confirm_author[0] = '\0'; // various authors
+            const char *heading = fb_custom_heading_for(s->item_type, s->custom_headings, s->custom_heading_count);
+            if (!heading) heading = fb_heading_for_item(s->item_type);
+            s->confirm_heading[0] = '\0';
+            if (heading) strncpy(s->confirm_heading, heading, FB_MAX_NAME - 1);
+            s->confirm_batch_count = s->batch_count;
+            s->confirm_model_exists = false;
+            s->confirm_item_has_model = false;
+            s->confirm_dialog_open = true;
         }
     }
     cy += BTN_H + PAD;
@@ -1051,12 +1053,23 @@ static void draw_confirm_dialog(FBAppState *s, int panel_w) {
     DrawRectangleLines(dx, dy, dw, dh, C_BORDER);
 
     int cy = dy + PAD;
-    DrawText("Confirm Import", dx + PAD, cy, FONT_TITLE, RAYWHITE); cy += FONT_TITLE + 12;
+    const char *titles[] = {"Confirm Import", "Confirm Batch Import", "Confirm Duplicate"};
+    DrawText(titles[s->confirm_mode], dx + PAD, cy, FONT_TITLE, RAYWHITE);
+    cy += FONT_TITLE + 12;
 
     // Status tag
     const char *status;
     Color status_color;
-    if (s->confirm_item_has_model) {
+    if (s->confirm_mode == 1) {
+        // Batch
+        status = TextFormat("BATCH — %d model%s", s->confirm_batch_count,
+                            s->confirm_batch_count == 1 ? "" : "s");
+        status_color = (Color){180, 130, 255, 255}; // purple
+    } else if (s->confirm_mode == 2) {
+        // Duplicate
+        status = "DUPLICATE (adding existing model to new item)";
+        status_color = (Color){0, 200, 255, 255}; // cyan
+    } else if (s->confirm_item_has_model) {
         status = "UPDATE (already on this item)";
         status_color = (Color){255, 180, 0, 255}; // yellow
     } else if (s->confirm_model_exists) {
@@ -1071,16 +1084,24 @@ static void draw_confirm_dialog(FBAppState *s, int panel_w) {
 
     // Details
     int label_w = 70;
-    DrawText("Model:", dx + PAD, cy, FONT_SMALL, C_DIM);
-    DrawText(s->confirm_model_name, dx + PAD + label_w, cy, FONT_SMALL, RAYWHITE);
-    cy += FONT_SMALL + 6;
+    if (s->confirm_mode == 1) {
+        // Batch: show count + item
+        DrawText("Files:", dx + PAD, cy, FONT_SMALL, C_DIM);
+        DrawText(TextFormat("%d model%s", s->confirm_batch_count,
+                 s->confirm_batch_count == 1 ? "" : "s"), dx + PAD + label_w, cy, FONT_SMALL, RAYWHITE);
+        cy += FONT_SMALL + 6;
+    } else {
+        DrawText("Model:", dx + PAD, cy, FONT_SMALL, C_DIM);
+        DrawText(s->confirm_model_name, dx + PAD + label_w, cy, FONT_SMALL, RAYWHITE);
+        cy += FONT_SMALL + 6;
+    }
 
     DrawText("Item:", dx + PAD, cy, FONT_SMALL, C_DIM);
     DrawText(s->confirm_item_type, dx + PAD + label_w, cy, FONT_SMALL, RAYWHITE);
     cy += FONT_SMALL + 6;
 
     DrawText("Author:", dx + PAD, cy, FONT_SMALL, C_DIM);
-    DrawText(s->confirm_author[0] ? s->confirm_author : "(none)", dx + PAD + label_w, cy, FONT_SMALL, RAYWHITE);
+    DrawText(s->confirm_author[0] ? s->confirm_author : "(various)", dx + PAD + label_w, cy, FONT_SMALL, RAYWHITE);
     cy += FONT_SMALL + 6;
 
     if (s->confirm_heading[0]) {
@@ -1094,13 +1115,34 @@ static void draw_confirm_dialog(FBAppState *s, int panel_w) {
     int btn_w2 = (dw - 3*PAD) / 2;
     if (GuiButton((Rectangle){(float)(dx+PAD), (float)btn_y, (float)btn_w2, BTN_H}, "Confirm")) {
         s->confirm_dialog_open = false;
-        // Do the actual import
-        const char *name = s->model_name[0] ? s->model_name : NULL;
-        const char *heading = s->pending_heading_override[0] ? s->pending_heading_override : NULL;
-        if (!heading) heading = fb_custom_heading_for(s->item_type, s->custom_headings, s->custom_heading_count);
-        fb_add_to_pack(s->bbmodel_path, s->pack_path, s->item_type,
-                       name, s->author, heading, &s->log);
-        s->pending_heading_override[0] = '\0';
+
+        if (s->confirm_mode == 0) {
+            // Single import
+            const char *name = s->model_name[0] ? s->model_name : NULL;
+            const char *heading = s->pending_heading_override[0] ? s->pending_heading_override : NULL;
+            if (!heading) heading = fb_custom_heading_for(s->item_type, s->custom_headings, s->custom_heading_count);
+            fb_add_to_pack(s->bbmodel_path, s->pack_path, s->item_type,
+                           name, s->author, heading, &s->log);
+            s->pending_heading_override[0] = '\0';
+        } else if (s->confirm_mode == 1) {
+            // Batch import
+            for (int i = 0; i < s->batch_count; i++) {
+                FBBatchEntry *be = &s->batch_entries[i];
+                fb_log(&s->log, FB_LOG_HEADER, "Importing %s...", be->display_name);
+                const char *heading = fb_custom_heading_for(s->item_type, s->custom_headings, s->custom_heading_count);
+                fb_add_to_pack(be->path, s->pack_path, s->item_type,
+                               be->display_name, be->author, heading, &s->log);
+            }
+            fb_log(&s->log, FB_LOG_SUCCESS, "Batch import complete (%d files)", s->batch_count);
+        } else if (s->confirm_mode == 2) {
+            // Duplicate
+            FBPackEntry *e = &s->pack_entries[s->dup_dialog_entry];
+            fb_duplicate_to_item(s->pack_path, e->model_name, s->confirm_item_type, e->author, &s->log);
+            s->dup_dialog_open = false;
+            dup_dlg_edit = false;
+            dup_dropdown_open = false;
+        }
+
         // Auto-rescan
         s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
         s->pack_scanned = true;
@@ -1205,11 +1247,17 @@ static void draw_dup_dialog(FBAppState *s, int panel_w) {
     if (GuiButton((Rectangle){(float)(dx+PAD), (float)btn_y, (float)btn_w2, BTN_H}, "Duplicate")) {
         if (s->dup_dialog_value[0]) {
             fb_log_clear(&s->log);
-            fb_duplicate_to_item(s->pack_path, e->model_name, s->dup_dialog_value, e->author, &s->log);
-            s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
-            s->dup_dialog_open = false;
-            dup_dlg_edit = false;
-            dup_dropdown_open = false;
+            // Open confirmation dialog
+            s->confirm_mode = 2;
+            strncpy(s->confirm_model_name, e->model_name, FB_MAX_NAME - 1);
+            strncpy(s->confirm_item_type, s->dup_dialog_value, FB_MAX_NAME - 1);
+            strncpy(s->confirm_author, e->author, FB_MAX_NAME - 1);
+            const char *heading = fb_heading_for_item(s->dup_dialog_value);
+            s->confirm_heading[0] = '\0';
+            if (heading) strncpy(s->confirm_heading, heading, FB_MAX_NAME - 1);
+            s->confirm_model_exists = true;
+            s->confirm_item_has_model = false;
+            s->confirm_dialog_open = true;
         }
     }
     if (GuiButton((Rectangle){(float)(dx+2*PAD+btn_w2), (float)btn_y, (float)btn_w2, BTN_H}, "Cancel")) {
