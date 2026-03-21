@@ -244,57 +244,19 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     if (!item_edit) s->item_dropdown_open = false;
     cy += FIELD_H;
 
-    // Dropdown suggestions (drawn below the item field, overlapping other content)
-    static bool dropdown_clicked_this_frame = false;
+    // Dropdown saved cy for later — button goes below zip section
+    int dropdown_cy = cy; // remember where dropdown draws
+    cy += PAD + 8;        // skip past dropdown area
+
+    // ── Import button (placed well below dropdown) ──────────────────────
     static double import_cooldown_until = 0.0;
-    dropdown_clicked_this_frame = false;
-
-    if (s->item_dropdown_open && s->item_suggestion_count > 0) {
-        char needle[FB_MAX_NAME];
-        strncpy(needle, s->item_type, sizeof(needle) - 1); needle[sizeof(needle)-1] = '\0';
-        for (char *p = needle; *p; p++) if (*p >= 'A' && *p <= 'Z') *p += 32;
-
-        int dd_max = 8;
-        int dd_count = 0;
-        int dd_indices[FB_MAX_SUGGESTIONS];
-        for (int i = 0; i < s->item_suggestion_count && dd_count < dd_max; i++) {
-            if (!needle[0] || strstr(s->item_suggestions[i], needle))
-                dd_indices[dd_count++] = i;
-        }
-
-        if (dd_count > 0) {
-            int dd_h = dd_count * ROW_H;
-            DrawRectangle(x+PAD, cy, w-2*PAD, dd_h, (Color){25,25,28,245});
-            DrawRectangleLines(x+PAD, cy, w-2*PAD, dd_h, C_BORDER);
-            for (int di = 0; di < dd_count; di++) {
-                int dy = cy + di * ROW_H;
-                Rectangle dr = {(float)(x+PAD), (float)dy, (float)(w-2*PAD), (float)ROW_H};
-                bool dhov = CheckCollisionPointRec(GetMousePosition(), dr);
-                if (dhov) DrawRectangleRec(dr, C_ROW_HOVER);
-                if (dhov && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                    dropdown_clicked_this_frame = true;
-                    import_cooldown_until = GetTime() + 1.0;
-                }
-                DrawText(s->item_suggestions[dd_indices[di]], x+PAD+6,
-                         dy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, dhov ? RAYWHITE : C_TEXT);
-            }
-            cy += dd_h;
-        } else {
-            s->item_dropdown_open = false;
-        }
-    }
-    cy += PAD + 8;
-
-    // Import button (completely skipped during cooldown to prevent raygui firing)
     Rectangle btn_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), BTN_H};
-    bool locked = dropdown_clicked_this_frame || GetTime() <= import_cooldown_until;
     bool do_import = false;
-    if (locked) {
-        // Draw greyed-out button without processing input
-        int prev = GuiGetState();
+    if (GetTime() <= import_cooldown_until) {
+        int prev_state = GuiGetState();
         GuiSetState(STATE_DISABLED);
         GuiButton(btn_r, "Add to Pack");
-        GuiSetState(prev);
+        GuiSetState(prev_state);
     } else {
         do_import = GuiButton(btn_r, "Add to Pack");
     }
@@ -368,6 +330,37 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     // Log
     DrawText("Output", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
     draw_log(&s->log, x + PAD, cy, w - 2*PAD, h - (cy - y) - PAD);
+
+    // ── Dropdown overlay (drawn last so it renders on top) ──────────────
+    if (s->item_dropdown_open && s->item_suggestion_count > 0) {
+        char needle[FB_MAX_NAME];
+        strncpy(needle, s->item_type, sizeof(needle) - 1); needle[sizeof(needle)-1] = '\0';
+        for (char *p = needle; *p; p++) if (*p >= 'A' && *p <= 'Z') *p += 32;
+
+        int dd_max = 8;
+        int dd_count = 0;
+        int dd_indices[FB_MAX_SUGGESTIONS];
+        for (int i = 0; i < s->item_suggestion_count && dd_count < dd_max; i++) {
+            if (!needle[0] || strstr(s->item_suggestions[i], needle))
+                dd_indices[dd_count++] = i;
+        }
+
+        if (dd_count > 0) {
+            int dd_h = dd_count * ROW_H;
+            DrawRectangle(x+PAD, dropdown_cy, w-2*PAD, dd_h, (Color){25,25,28,245});
+            DrawRectangleLines(x+PAD, dropdown_cy, w-2*PAD, dd_h, C_BORDER);
+            for (int di = 0; di < dd_count; di++) {
+                int dy = dropdown_cy + di * ROW_H;
+                Rectangle dr = {(float)(x+PAD), (float)dy, (float)(w-2*PAD), (float)ROW_H};
+                bool dhov = CheckCollisionPointRec(GetMousePosition(), dr);
+                if (dhov) DrawRectangleRec(dr, C_ROW_HOVER);
+                DrawText(s->item_suggestions[dd_indices[di]], x+PAD+6,
+                         dy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, dhov ? RAYWHITE : C_TEXT);
+            }
+        } else {
+            s->item_dropdown_open = false;
+        }
+    }
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
