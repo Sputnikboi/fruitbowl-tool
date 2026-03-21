@@ -248,9 +248,13 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     int dropdown_cy = cy; // remember where dropdown draws
     cy += PAD + 8;        // skip past dropdown area
 
-    // ── Output log ──────────────────────────────────────────────────────
+    // ── Output log (fills remaining space above bottom controls) ────────
+    // Bottom controls: Import button + pad + zip separator + pad + zip label + zip row + pad
+    int bottom_h = BTN_H + PAD + 1 + PAD + FONT_LABEL + 3 + FIELD_H + PAD;
+    int log_top = cy + FONT_LABEL + 3;
+    int log_h = (y + h) - log_top - bottom_h - PAD;
+    if (log_h < 40) log_h = 40; // minimum height
     DrawText("Output", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
-    int log_h = 100;
     draw_log(&s->log, x + PAD, cy, w - 2*PAD, log_h);
     cy += log_h + PAD;
 
