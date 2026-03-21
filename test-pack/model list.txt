@@ -13,3 +13,4 @@ Steak:
 
 
 White Wool:
+1 = Ary Doll

@@ -845,11 +845,58 @@ static void draw_batch_tab(FBAppState *s, int x, int y, int w, int h) {
     }
     cy += FIELD_H + PAD;
 
-    // Item type for batch
+    // Item type for batch (with dropdown)
     DrawText("Minecraft Item (for all files)", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
     Rectangle bit_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), FIELD_H};
     static bool bit_edit = false;
-    if (GuiTextBox(bit_r, s->item_type, FB_MAX_NAME, bit_edit)) bit_edit = !bit_edit;
+    static bool batch_item_dropdown = false;
+
+    // Check dropdown hit BEFORE textbox
+    bool batch_dd_clicked = false;
+    int batch_dd_cy = cy + (int)FIELD_H;
+    int batch_dd_count = 0;
+    int batch_dd_indices[FB_MAX_SUGGESTIONS];
+    if (batch_item_dropdown && s->item_suggestion_count > 0) {
+        char needle[FB_MAX_NAME];
+        strncpy(needle, s->item_type, sizeof(needle) - 1); needle[sizeof(needle)-1] = '\0';
+        for (char *p = needle; *p; p++) if (*p >= 'A' && *p <= 'Z') *p += 32;
+        for (int i = 0; i < s->item_suggestion_count && batch_dd_count < 8; i++) {
+            if (!needle[0] || strstr(s->item_suggestions[i], needle))
+                batch_dd_indices[batch_dd_count++] = i;
+        }
+        if (batch_dd_count > 0 && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            for (int di = 0; di < batch_dd_count; di++) {
+                Rectangle dr = {(float)(x+PAD), (float)(batch_dd_cy + di * ROW_H),
+                                (float)(w-2*PAD), (float)ROW_H};
+                if (CheckCollisionPointRec(GetMousePosition(), dr)) {
+                    strncpy(s->item_type, s->item_suggestions[batch_dd_indices[di]], FB_MAX_NAME - 1);
+                    batch_item_dropdown = false;
+                    bit_edit = false;
+                    batch_dd_clicked = true;
+                    break;
+                }
+            }
+        }
+        if (batch_dd_count == 0) batch_item_dropdown = false;
+    }
+
+    if (!batch_dd_clicked) {
+        if (GuiTextBox(bit_r, s->item_type, FB_MAX_NAME, bit_edit)) bit_edit = !bit_edit;
+        if (bit_edit && s->item_type[0]) {
+            batch_item_dropdown = true;
+            // Ensure suggestions are loaded
+            if (s->item_suggestion_count == 0 && s->pack_path[0])
+                s->item_suggestion_count = fb_scan_pack_items(s->pack_path, s->item_suggestions, FB_MAX_SUGGESTIONS);
+        }
+        if (!bit_edit) batch_item_dropdown = false;
+    }
+    cy += FIELD_H + PAD;
+
+    // Author for batch
+    DrawText("Author (for new files)", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
+    Rectangle bauth_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), FIELD_H};
+    static bool bauth_edit = false;
+    if (GuiTextBox(bauth_r, s->author, FB_MAX_NAME, bauth_edit)) bauth_edit = !bauth_edit;
     cy += FIELD_H + PAD;
 
     // Button row: Add Files, Add Folder, Remove, Clear, Set Author
@@ -1017,7 +1064,18 @@ static void draw_batch_tab(FBAppState *s, int x, int y, int w, int h) {
             // Open confirmation dialog for batch
             s->confirm_mode = 1;
             strncpy(s->confirm_item_type, s->item_type, FB_MAX_NAME - 1);
-            s->confirm_author[0] = '\0'; // various authors
+            // Check if all batch entries share the same author
+            bool same_author = true;
+            for (int i = 1; i < s->batch_count; i++) {
+                if (strcmp(s->batch_entries[i].author, s->batch_entries[0].author) != 0) {
+                    same_author = false;
+                    break;
+                }
+            }
+            if (same_author && s->batch_count > 0)
+                strncpy(s->confirm_author, s->batch_entries[0].author, FB_MAX_NAME - 1);
+            else
+                s->confirm_author[0] = '\0';
             const char *heading = fb_custom_heading_for(s->item_type, s->custom_headings, s->custom_heading_count);
             if (!heading) heading = fb_heading_for_item(s->item_type);
             s->confirm_heading[0] = '\0';
@@ -1033,6 +1091,21 @@ static void draw_batch_tab(FBAppState *s, int x, int y, int w, int h) {
     // Log
     DrawText("Output", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
     draw_log(&s->log, x + PAD, cy, w - 2*PAD, h - (cy - y) - PAD);
+
+    // Batch item dropdown overlay (drawn last so it renders on top)
+    if (batch_item_dropdown && batch_dd_count > 0) {
+        int dd_h = batch_dd_count * ROW_H;
+        DrawRectangle(x+PAD, batch_dd_cy, w-2*PAD, dd_h, (Color){25,25,28,245});
+        DrawRectangleLines(x+PAD, batch_dd_cy, w-2*PAD, dd_h, C_BORDER);
+        for (int di = 0; di < batch_dd_count; di++) {
+            int ddy = batch_dd_cy + di * ROW_H;
+            Rectangle dr = {(float)(x+PAD), (float)ddy, (float)(w-2*PAD), (float)ROW_H};
+            bool dhov = CheckCollisionPointRec(GetMousePosition(), dr);
+            if (dhov) DrawRectangleRec(dr, C_ROW_HOVER);
+            DrawText(s->item_suggestions[batch_dd_indices[di]], x+PAD+6,
+                     ddy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, dhov ? RAYWHITE : C_TEXT);
+        }
+    }
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
