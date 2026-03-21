@@ -485,10 +485,34 @@ static void update_model_list(const char *pack_root, const char *mc_item_id,
         return;
     }
 
-    // Check if threshold already exists in section — replace it
+    // Find end of section (next heading or EOF) — needed for both replace and append
+    char *section_end = heading_pos + strlen(heading_pat);
+    while (*section_end) {
+        if (*section_end == '\n') {
+            char *next = section_end + 1;
+            // Skip empty lines
+            while (*next == '\n' || *next == '\r') next++;
+            // Check if next non-empty line is a heading (no digit start)
+            if (*next && !(*next >= '0' && *next <= '9') && *next != '\n' && *next != '\r') {
+                break;
+            }
+            if (!*next) { section_end = next; break; }
+        }
+        section_end++;
+    }
+
+    // Check if threshold already exists in THIS section only — replace it
     char thresh_pat[32];
     snprintf(thresh_pat, sizeof(thresh_pat), "\n%d =", threshold);
-    char *line_pos = strstr(heading_pos, thresh_pat);
+    char *line_pos = NULL;
+    {
+        char *search = heading_pos;
+        while ((search = strstr(search, thresh_pat)) != NULL) {
+            if (search >= section_end) break; // past our section
+            line_pos = search;
+            break;
+        }
+    }
     if (line_pos) {
         // Find end of this line
         char *line_end = strchr(line_pos + 1, '\n');
@@ -509,23 +533,6 @@ static void update_model_list(const char *pack_root, const char *mc_item_id,
         free(content);
         fb_log(log, FB_LOG_WARN, "Updated model list: %s", entry_line);
         return;
-    }
-
-    // Append after last entry in section
-    // Find end of section (next heading or EOF)
-    char *section_end = heading_pos + strlen(heading_pat);
-    while (*section_end) {
-        if (*section_end == '\n') {
-            char *next = section_end + 1;
-            // Skip empty lines
-            while (*next == '\n' || *next == '\r') next++;
-            // Check if next non-empty line is a heading (no digit start)
-            if (*next && !(*next >= '0' && *next <= '9') && *next != '\n' && *next != '\r') {
-                break;
-            }
-            if (!*next) { section_end = next; break; }
-        }
-        section_end++;
     }
 
     // Back up past trailing newlines
