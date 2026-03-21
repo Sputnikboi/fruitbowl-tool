@@ -2,7 +2,7 @@
 
 Golden Carrot:
 
-1 = Sour Patch Kids Slant (snow)
+1 = Sour Patch Kids Slant
 
-2 = Saltine Cracker (snowaffa)
+2 = Saltine Cracker (ad)
 Feather:

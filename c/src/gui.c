@@ -285,11 +285,19 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     }
     cy += PAD + 8;
 
-    // Import button (suppressed by dropdown click or cooldown)
+    // Import button (completely skipped during cooldown to prevent raygui firing)
     Rectangle btn_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), BTN_H};
-    bool import_btn_now = GuiButton(btn_r, "Add to Pack");
-    bool do_import = import_btn_now && !dropdown_clicked_this_frame
-                     && GetTime() > import_cooldown_until;
+    bool locked = dropdown_clicked_this_frame || GetTime() <= import_cooldown_until;
+    bool do_import = false;
+    if (locked) {
+        // Draw greyed-out button without processing input
+        int prev = GuiGetState();
+        GuiSetState(STATE_DISABLED);
+        GuiButton(btn_r, "Add to Pack");
+        GuiSetState(prev);
+    } else {
+        do_import = GuiButton(btn_r, "Add to Pack");
+    }
     // Also handle pending import (after heading dialog completes)
     if (s->pending_import && !s->heading_dialog_open) {
         do_import = true;
