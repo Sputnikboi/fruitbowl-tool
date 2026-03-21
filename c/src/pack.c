@@ -474,10 +474,14 @@ static void update_model_list(const char *pack_root, const char *mc_item_id,
     }
 
     if (!heading_pos) {
-        // Append new section
-        int new_len = file_len + (int)strlen(heading_pat) + (int)strlen(entry_line) + 8;
+        // Append new section — trim trailing newlines from existing content first
+        int trimmed = file_len;
+        while (trimmed > 0 && (content[trimmed-1] == '\n' || content[trimmed-1] == '\r'))
+            trimmed--;
+        content[trimmed] = '\0';
+        int new_len = trimmed + (int)strlen(heading_pat) + (int)strlen(entry_line) + 8;
         char *new_content = malloc(new_len);
-        snprintf(new_content, new_len, "%s\n\n%s\n%s\n", content, heading_pat, entry_line);
+        snprintf(new_content, new_len, "%s\n\n\n%s\n%s\n", content, heading_pat, entry_line);
         fb_write_file(path, new_content, (int)strlen(new_content));
         free(new_content);
         free(content);
@@ -535,20 +539,19 @@ static void update_model_list(const char *pack_root, const char *mc_item_id,
         return;
     }
 
-    // Back up past trailing newlines
+    // Back up past trailing newlines, keep one
     while (section_end > heading_pos && (*(section_end-1) == '\n' || *(section_end-1) == '\r'))
         section_end--;
     section_end++; // keep one newline
 
     int insert_at = (int)(section_end - content);
     int entry_len = (int)strlen(entry_line);
-    int new_len = file_len + entry_len + 2;
+    int new_len = file_len + entry_len + 1;
     char *new_content = malloc(new_len);
     memcpy(new_content, content, insert_at);
-    new_content[insert_at] = '\n';
-    memcpy(new_content + insert_at + 1, entry_line, entry_len);
-    memcpy(new_content + insert_at + 1 + entry_len, content + insert_at, file_len - insert_at);
-    new_content[insert_at + 1 + entry_len + (file_len - insert_at)] = '\0';
+    memcpy(new_content + insert_at, entry_line, entry_len);
+    memcpy(new_content + insert_at + entry_len, content + insert_at, file_len - insert_at);
+    new_content[insert_at + entry_len + (file_len - insert_at)] = '\0';
     fb_write_file(path, new_content, (int)strlen(new_content));
     free(new_content);
     free(content);

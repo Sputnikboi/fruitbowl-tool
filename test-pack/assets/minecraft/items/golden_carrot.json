@@ -7,6 +7,12 @@
 			"type":	"minecraft:model",
 			"model":	"minecraft:item/golden_carrot"
 		},
-		"entries":	[]
+		"entries":	[{
+				"threshold":	1,
+				"model":	{
+					"type":	"minecraft:model",
+					"model":	"fruitbowl:item/ary_doll"
+				}
+			}]
 	}
 }
