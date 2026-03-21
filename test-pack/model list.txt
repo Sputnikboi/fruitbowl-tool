@@ -2,24 +2,18 @@
 
 Golden Carrot:
 
-1 = Sour Patch Kids Slant
 
-2 = Saltine Cracker (ad)
 
-3 = Sputnikboi (Sputnik)Feather:
 
 
 Pale Oak Button:
-1 = Sputnikboi (afa)
 
 
 Steak:
-1 = Sputnikboi (ad)
 
+1 = Sputnikboi (ada)
 
 White Wool:
-1 = Ary Doll (Brok)
 
 
 Carved Pumpkin:
-1 = Sputnikboi (Sputnik)
