@@ -188,6 +188,17 @@ typedef struct {
     char        dup_dialog_value[FB_MAX_NAME];  // target item type
     int         dup_dialog_entry;               // index of entry being duplicated
 
+    // Import confirmation dialog
+    bool        confirm_dialog_open;
+    char        confirm_model_name[FB_MAX_NAME];
+    char        confirm_item_type[FB_MAX_NAME];
+    char        confirm_author[FB_MAX_NAME];
+    char        confirm_heading[FB_MAX_NAME];
+    bool        confirm_model_exists;   // model/texture already in pack
+    bool        confirm_item_has_model; // item dispatch already has this model
+    bool        confirm_is_batch;       // batch import mode
+    int         confirm_batch_count;    // number of files in batch
+
     // Manage inline author editing
     int         manage_editing_author;  // index being edited, -1 = none
     char        manage_edit_buf[FB_MAX_NAME];

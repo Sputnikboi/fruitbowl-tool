@@ -288,25 +288,52 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
             fb_log(&s->log, FB_LOG_ERROR, "Enter a Minecraft item type");
         } else if (fb_needs_heading_name(s->item_type, s->custom_headings, s->custom_heading_count)
                    && !s->pending_heading_override[0]) {
-            // Need to ask for heading name first
             s->heading_dialog_open = true;
             strncpy(s->heading_dialog_item, s->item_type, FB_MAX_NAME - 1);
             s->heading_dialog_value[0] = '\0';
             s->pending_import = true;
         } else {
+            // Open confirmation dialog
             const char *name = s->model_name[0] ? s->model_name : NULL;
+            // Derive model name from bbmodel filename if not set
+            char derived_name[FB_MAX_NAME];
+            if (!name) {
+                const char *sl = strrchr(s->bbmodel_path, '/');
+                if (!sl) sl = strrchr(s->bbmodel_path, '\\');
+                const char *base = sl ? sl + 1 : s->bbmodel_path;
+                strncpy(derived_name, base, sizeof(derived_name) - 1);
+                derived_name[sizeof(derived_name)-1] = '\0';
+                char *dot = strrchr(derived_name, '.');
+                if (dot) *dot = '\0';
+                name = derived_name;
+            }
+            strncpy(s->confirm_model_name, name, FB_MAX_NAME - 1);
+            strncpy(s->confirm_item_type, s->item_type, FB_MAX_NAME - 1);
+            strncpy(s->confirm_author, s->author, FB_MAX_NAME - 1);
             const char *heading = s->pending_heading_override[0] ? s->pending_heading_override : NULL;
             if (!heading) heading = fb_custom_heading_for(s->item_type, s->custom_headings, s->custom_heading_count);
-            fb_add_to_pack(s->bbmodel_path, s->pack_path, s->item_type,
-                           name, s->author, heading, &s->log);
-            s->pending_heading_override[0] = '\0';
-            import_cooldown_until = GetTime() + 1.0; // 1s lockout
-            // Auto-rescan
-            s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
-            s->pack_scanned = true;
-            // Refresh item suggestions
-            s->item_suggestion_count = fb_scan_pack_items(
-                s->pack_path, s->item_suggestions, FB_MAX_SUGGESTIONS);
+            if (!heading) heading = fb_heading_for_item(s->item_type);
+            s->confirm_heading[0] = '\0';
+            if (heading) strncpy(s->confirm_heading, heading, FB_MAX_NAME - 1);
+
+            // Check existing state
+            char chk_path[FB_MAX_PATH];
+            snprintf(chk_path, sizeof(chk_path), "%s/%s/%s.json", s->pack_path, FB_MODEL_DIR, name);
+            s->confirm_model_exists = fb_file_exists(chk_path);
+            s->confirm_item_has_model = false;
+            // Check if this model is already in the item's dispatch
+            snprintf(chk_path, sizeof(chk_path), "%s/assets/minecraft/items/%s.json", s->pack_path, s->item_type);
+            if (fb_file_exists(chk_path)) {
+                int flen = 0;
+                char *fc = fb_read_file(chk_path, &flen);
+                if (fc) {
+                    if (strstr(fc, name)) s->confirm_item_has_model = true;
+                    free(fc);
+                }
+            }
+            s->confirm_is_batch = false;
+            s->confirm_dialog_open = true;
+            import_cooldown_until = GetTime() + 1.0;
         }
     }
     cy += BTN_H + PAD;
@@ -1014,6 +1041,80 @@ static void draw_heading_dialog(FBAppState *s, int panel_w) {
 // Duplicate Dialog (modal overlay)
 // ═════════════════════════════════════════════════════════════════════════════
 
+static void draw_confirm_dialog(FBAppState *s, int panel_w) {
+    int sw = GetScreenWidth(), sh = GetScreenHeight();
+    DrawRectangle(0, 0, sw, sh, (Color){0,0,0,150});
+
+    int dw = (int)(380 * gui_scale), dh = (int)(240 * gui_scale);
+    int dx = (panel_w - dw) / 2, dy = (sh - dh) / 2;
+    DrawRectangle(dx, dy, dw, dh, C_PANEL);
+    DrawRectangleLines(dx, dy, dw, dh, C_BORDER);
+
+    int cy = dy + PAD;
+    DrawText("Confirm Import", dx + PAD, cy, FONT_TITLE, RAYWHITE); cy += FONT_TITLE + 12;
+
+    // Status tag
+    const char *status;
+    Color status_color;
+    if (s->confirm_item_has_model) {
+        status = "UPDATE (already on this item)";
+        status_color = (Color){255, 180, 0, 255}; // yellow
+    } else if (s->confirm_model_exists) {
+        status = "DUPLICATE (model exists, adding to new item)";
+        status_color = (Color){0, 200, 255, 255}; // cyan
+    } else {
+        status = "NEW MODEL";
+        status_color = (Color){80, 220, 80, 255}; // green
+    }
+    DrawText(status, dx + PAD, cy, FONT_SMALL, status_color);
+    cy += FONT_SMALL + 12;
+
+    // Details
+    int label_w = 70;
+    DrawText("Model:", dx + PAD, cy, FONT_SMALL, C_DIM);
+    DrawText(s->confirm_model_name, dx + PAD + label_w, cy, FONT_SMALL, RAYWHITE);
+    cy += FONT_SMALL + 6;
+
+    DrawText("Item:", dx + PAD, cy, FONT_SMALL, C_DIM);
+    DrawText(s->confirm_item_type, dx + PAD + label_w, cy, FONT_SMALL, RAYWHITE);
+    cy += FONT_SMALL + 6;
+
+    DrawText("Author:", dx + PAD, cy, FONT_SMALL, C_DIM);
+    DrawText(s->confirm_author[0] ? s->confirm_author : "(none)", dx + PAD + label_w, cy, FONT_SMALL, RAYWHITE);
+    cy += FONT_SMALL + 6;
+
+    if (s->confirm_heading[0]) {
+        DrawText("Section:", dx + PAD, cy, FONT_SMALL, C_DIM);
+        DrawText(s->confirm_heading, dx + PAD + label_w, cy, FONT_SMALL, RAYWHITE);
+        cy += FONT_SMALL + 6;
+    }
+
+    // Buttons at bottom
+    int btn_y = dy + dh - BTN_H - PAD;
+    int btn_w2 = (dw - 3*PAD) / 2;
+    if (GuiButton((Rectangle){(float)(dx+PAD), (float)btn_y, (float)btn_w2, BTN_H}, "Confirm")) {
+        s->confirm_dialog_open = false;
+        // Do the actual import
+        const char *name = s->model_name[0] ? s->model_name : NULL;
+        const char *heading = s->pending_heading_override[0] ? s->pending_heading_override : NULL;
+        if (!heading) heading = fb_custom_heading_for(s->item_type, s->custom_headings, s->custom_heading_count);
+        fb_add_to_pack(s->bbmodel_path, s->pack_path, s->item_type,
+                       name, s->author, heading, &s->log);
+        s->pending_heading_override[0] = '\0';
+        // Auto-rescan
+        s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
+        s->pack_scanned = true;
+        s->item_suggestion_count = fb_scan_pack_items(
+            s->pack_path, s->item_suggestions, FB_MAX_SUGGESTIONS);
+    }
+    if (GuiButton((Rectangle){(float)(dx+2*PAD+btn_w2), (float)btn_y, (float)btn_w2, BTN_H}, "Cancel")) {
+        s->confirm_dialog_open = false;
+    }
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        s->confirm_dialog_open = false;
+    }
+}
+
 static void draw_dup_dialog(FBAppState *s, int panel_w) {
     int sw = GetScreenWidth(), sh = GetScreenHeight();
     DrawRectangle(0, 0, sw, sh, (Color){0,0,0,150});
@@ -1247,6 +1348,9 @@ void fb_draw_gui(FBAppState *s) {
         // Modal dialogs (drawn on top)
         if (s->heading_dialog_open) {
             draw_heading_dialog(s, panel_w);
+        }
+        if (s->confirm_dialog_open) {
+            draw_confirm_dialog(s, panel_w);
         }
         if (s->dup_dialog_open) {
             draw_dup_dialog(s, panel_w);
