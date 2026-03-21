@@ -271,8 +271,10 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
                 Rectangle dr = {(float)(x+PAD), (float)dy, (float)(w-2*PAD), (float)ROW_H};
                 bool dhov = CheckCollisionPointRec(GetMousePosition(), dr);
                 if (dhov) DrawRectangleRec(dr, C_ROW_HOVER);
-                if (dhov && IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
+                if (dhov && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                     dropdown_clicked_this_frame = true;
+                    import_cooldown_until = GetTime() + 1.0;
+                }
                 DrawText(s->item_suggestions[dd_indices[di]], x+PAD+6,
                          dy + ROW_H/2 - FONT_SMALL/2, FONT_SMALL, dhov ? RAYWHITE : C_TEXT);
             }
