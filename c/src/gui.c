@@ -279,7 +279,10 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
 
     // Import button
     Rectangle btn_r = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), BTN_H};
-    bool do_import = GuiButton(btn_r, "Add to Pack");
+    static bool import_btn_was_pressed = false;
+    bool import_btn_now = GuiButton(btn_r, "Add to Pack");
+    bool do_import = import_btn_now && !import_btn_was_pressed;
+    import_btn_was_pressed = import_btn_now;
     // Also handle pending import (after heading dialog completes)
     if (s->pending_import && !s->heading_dialog_open) {
         do_import = true;
@@ -901,7 +904,11 @@ static void draw_batch_tab(FBAppState *s, int x, int y, int w, int h) {
 
     // Import All button
     Rectangle import_all = {(float)(x+PAD), (float)cy, (float)(w-2*PAD), BTN_H};
-    if (GuiButton(import_all, "Import All to Pack")) {
+    static bool batch_btn_was_pressed = false;
+    bool batch_btn_now = GuiButton(import_all, "Import All to Pack");
+    bool do_batch = batch_btn_now && !batch_btn_was_pressed;
+    batch_btn_was_pressed = batch_btn_now;
+    if (do_batch) {
         fb_log_clear(&s->log);
         if (!s->pack_path[0]) {
             fb_log(&s->log, FB_LOG_ERROR, "Set a pack path first");
