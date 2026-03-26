@@ -267,8 +267,7 @@ White Wool:
 35 = Snow Plush (Brok - Snow)
 36 = Chef Hampter (Brok)
 37 = Mumbo Toy (Brok - Harvey)
-38 = Cinfral Plush (Brok)
-30 = Cinfral Plush (Brok)
+
 
 Milk Bucket:
 1 = Hot Chocolate (s2 model)
@@ -347,7 +346,6 @@ Leather:
 38 = Emrick Plush (Brok - Mag)
 39 = Elodie Plush (Brok - Emdi)
 40 = Koneko-chan Plush (Brok - Harvey)
-41 = Cinfral Plush (Brok)
 
 Pale Oak Button:
 1 = ??? (Sputnik)

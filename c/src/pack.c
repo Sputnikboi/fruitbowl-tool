@@ -655,16 +655,47 @@ static void remove_from_model_list(const char *pack_root, const char *mc_item_id
     if (!content) { fb_log(log, FB_LOG_WARN, "model list.txt not found"); return; }
 
     const char *heading = fb_heading_for_item(mc_item_id);
-    if (!heading) { free(content); return; }
+    char heading_buf[FB_MAX_NAME];
+    if (!heading) {
+        fb_display_name(mc_item_id, heading_buf, sizeof(heading_buf));
+        heading = heading_buf;
+    }
 
+    // Find the heading in the file
+    char heading_pat[FB_MAX_NAME + 2];
+    snprintf(heading_pat, sizeof(heading_pat), "%s:", heading);
+    char *heading_pos = strstr(content, heading_pat);
+    if (heading_pos && heading_pos != content && *(heading_pos - 1) != '\n')
+        heading_pos = NULL;
+    if (!heading_pos) {
+        fb_log(log, FB_LOG_WARN, "Section '%s' not found in model list", heading);
+        free(content);
+        return;
+    }
+
+    // Find end of section (next heading or EOF)
+    char *section_start = heading_pos + strlen(heading_pat);
+    char *section_end = section_start;
+    while (*section_end) {
+        if (*section_end == '\n') {
+            char *next = section_end + 1;
+            while (*next == '\n' || *next == '\r') next++;
+            if (*next && !(*next >= '0' && *next <= '9') && *next != '\n' && *next != '\r') {
+                break;
+            }
+            if (!*next) { section_end = next; break; }
+        }
+        section_end++;
+    }
+
+    // Search for threshold only within this section
     char thresh_pat[32];
     snprintf(thresh_pat, sizeof(thresh_pat), "%d =", threshold);
 
-    // Find the line with this threshold
-    char *pos = content;
+    char *pos = section_start;
     char *found = NULL;
-    while ((pos = strstr(pos, thresh_pat))) {
-        // Ensure it's at start of line
+    while ((pos = strstr(pos, thresh_pat)) != NULL) {
+        if (pos >= section_end) break;
         if (pos == content || *(pos - 1) == '\n') {
             found = pos;
             break;
@@ -673,7 +704,7 @@ static void remove_from_model_list(const char *pack_root, const char *mc_item_id
     }
 
     if (!found) {
-        fb_log(log, FB_LOG_WARN, "Threshold %d not found in model list", threshold);
+        fb_log(log, FB_LOG_WARN, "Threshold %d not found in '%s' section", threshold, heading);
         free(content);
         return;
     }
