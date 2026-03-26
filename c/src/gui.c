@@ -1518,22 +1518,46 @@ void fb_draw_gui(FBAppState *s) {
     // Handle drag & drop (works in all tabs)
     if (IsFileDropped()) {
         FilePathList files = LoadDroppedFiles();
-        if (files.count > 0) {
-            const char *path = files.paths[0];
+        fb_log(&s->log, FB_LOG_INFO, "Drop: %d file(s) received", files.count);
+        for (int di = 0; di < (int)files.count; di++) {
+            const char *path = files.paths[di];
+            fb_log(&s->log, FB_LOG_INFO, "  [%d] %s", di, path);
+        }
+        // Process first .bbmodel found
+        for (int di = 0; di < (int)files.count; di++) {
+            const char *path = files.paths[di];
             int len = (int)strlen(path);
-            if (len > 8 && strcmp(path + len - 8, ".bbmodel") == 0) {
-                // Load for preview
+            // Case-insensitive extension check
+            bool is_bbmodel = false;
+            if (len > 8) {
+                const char *ext = path + len - 8;
+                is_bbmodel = (ext[0] == '.' &&
+                    (ext[1] == 'b' || ext[1] == 'B') &&
+                    (ext[2] == 'b' || ext[2] == 'B') &&
+                    (ext[3] == 'm' || ext[3] == 'M') &&
+                    (ext[4] == 'o' || ext[4] == 'O') &&
+                    (ext[5] == 'd' || ext[5] == 'D') &&
+                    (ext[6] == 'e' || ext[6] == 'E') &&
+                    (ext[7] == 'l' || ext[7] == 'L'));
+            }
+            if (is_bbmodel) {
+                // Strip file:// URI prefix if present
+                const char *real_path = path;
+                if (strncmp(path, "file://", 7) == 0) real_path = path + 7;
+
                 if (s->preview_loaded) fb_unload_model_textures(&s->preview_model);
-                if (fb_parse_bbmodel(path, &s->preview_model)) {
-                    fb_load_bbmodel_textures(path, &s->preview_model);
+                if (fb_parse_bbmodel(real_path, &s->preview_model)) {
+                    fb_load_bbmodel_textures(real_path, &s->preview_model);
                     s->preview_loaded = true;
-                    strncpy(s->bbmodel_path, path, FB_MAX_PATH - 1);
-                    // Auto-fill model name
-                    fb_sanitize_name(path, s->model_name, FB_MAX_NAME);
+                    strncpy(s->bbmodel_path, real_path, FB_MAX_PATH - 1);
+                    fb_sanitize_name(real_path, s->model_name, FB_MAX_NAME);
                     reset_camera_to_model(&s->camera, &s->preview_model);
-                    // Switch to preview if not already there
                     if (s->active_tab != TAB_IMPORT) s->active_tab = TAB_PREVIEW;
+                    fb_log(&s->log, FB_LOG_SUCCESS, "Loaded: %s", s->model_name);
+                } else {
+                    fb_log(&s->log, FB_LOG_ERROR, "Failed to parse: %s", real_path);
                 }
+                break; // only load first .bbmodel
             }
         }
         UnloadDroppedFiles(files);
