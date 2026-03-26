@@ -286,12 +286,14 @@ static int update_dispatch(const char *pack_root, const char *mc_item_id,
     char ref[256];
     snprintf(ref, sizeof(ref), "fruitbowl:item/%s", model_name);
 
-    // Check for existing entry
+    // Check for existing entry and collect used thresholds
+    bool used[4096] = {false};
     int max_threshold = 0;
     cJSON *entry;
     cJSON_ArrayForEach(entry, entries) {
         cJSON *m = cJSON_GetObjectItem(entry, "model");
         int t = cJSON_GetObjectItem(entry, "threshold")->valueint;
+        if (t > 0 && t < 4096) used[t] = true;
         if (t > max_threshold) max_threshold = t;
 
         const char *existing = extract_model_ref(m);
@@ -303,8 +305,11 @@ static int update_dispatch(const char *pack_root, const char *mc_item_id,
         }
     }
 
-    // Add new entry
+    // Find first gap, or use max+1 if no gaps
     int threshold = max_threshold + 1;
+    for (int t = 1; t <= max_threshold; t++) {
+        if (!used[t]) { threshold = t; break; }
+    }
     *existed = false;
 
     cJSON *new_entry = cJSON_CreateObject();
@@ -338,7 +343,16 @@ static int update_dispatch(const char *pack_root, const char *mc_item_id,
         cJSON_AddStringToObject(m, "model", ref);
     }
 
-    cJSON_AddItemToArray(entries, new_entry);
+    // Insert at sorted position by threshold
+    int insert_pos = cJSON_GetArraySize(entries);
+    int idx = 0;
+    cJSON *e;
+    cJSON_ArrayForEach(e, entries) {
+        int t = cJSON_GetObjectItem(e, "threshold")->valueint;
+        if (t > threshold) { insert_pos = idx; break; }
+        idx++;
+    }
+    cJSON_InsertItemInArray(entries, insert_pos, new_entry);
     save_json_file(fullpath, root);
     cJSON_Delete(root);
     return threshold;
