@@ -27,7 +27,6 @@ Stone Button:
 27 = Pixie Magenta (Mag)
 28 = Pixie White (Mag)
 29 = Pixie Light Gray (Mag)
-30 = Pixie Gray (Mag)
 31 = Pixie Black (Mag)
 32 = Pixie Brown (Mag)
 33 = Beret (Ness - Nad)
@@ -35,10 +34,8 @@ Stone Button:
 35 = Spirit Companion Water (Mag)
 36 = Jynxs Hair Stuff (Belle)
 37 = Unicorn horn (Emdi)
-38 = Unicorn horn blood (Emdi)
 39 = Cow Skull (Emdi)
 40 = Lyris Antennae (Belle - Winter)
-41 = Styracosaurus Skull (Emdi)
 42 = Mothman Hat (Brok)
 43 = Mothman Hat Base (Brok)
 44 = Percy HW Hat (Brok - Ant)
@@ -263,7 +260,6 @@ White Wool:
 27 = Teddy Bear (Brok)
 28 = Hampter 2 (Brok)
 29 = Will Doll (Brok - Will)
-30 = Cinfral Doll (Brok - Monarch)
 31 = Feinberg Doll (Brok)
 32 = Ruden Doll (Brok - Ruden)
 33 = Arbazzu Doll (Brok - Arbazzu)
@@ -271,8 +267,8 @@ White Wool:
 35 = Snow Plush (Brok - Snow)
 36 = Chef Hampter (Brok)
 37 = Mumbo Toy (Brok - Harvey)
-
-
+38 = Cinfral Plush (Brok)
+30 = Cinfral Plush (Brok)
 
 Milk Bucket:
 1 = Hot Chocolate (s2 model)
@@ -340,7 +336,7 @@ Leather:
 27 = Teddy Bear (Brok)
 28 = Hampter 2 (Brok)
 29 = Will Doll (Brok - Will)
-30 = Cinfral Plush (Brok - Monarch)
+30 = Cinfral Plush (Brok)
 31 = Feinberg Doll (Brok)
 32 = Ruden Doll (Brok - Ruden)
 33 = Arbazzu Doll (Brok - Arbazzu)
@@ -351,7 +347,7 @@ Leather:
 38 = Emrick Plush (Brok - Mag)
 39 = Elodie Plush (Brok - Emdi)
 40 = Koneko-chan Plush (Brok - Harvey)
-
+41 = Cinfral Plush (Brok)
 
 Pale Oak Button:
 1 = ??? (Sputnik)

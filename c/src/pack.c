@@ -564,53 +564,81 @@ static void update_model_list(const char *pack_root, const char *mc_item_id,
         section_end++;
     }
 
-    // Check if threshold already exists in THIS section only — replace it
-    char thresh_pat[32];
-    snprintf(thresh_pat, sizeof(thresh_pat), "\n%d =", threshold);
-    char *line_pos = NULL;
+    // Remove any existing line with the same model name (different threshold)
+    // by searching for "= Display Name" pattern in this section
     {
+        char name_pat[256];
+        snprintf(name_pat, sizeof(name_pat), "= %s", display);
+        int name_pat_len = (int)strlen(name_pat);
         char *search = heading_pos;
-        while ((search = strstr(search, thresh_pat)) != NULL) {
-            if (search >= section_end) break; // past our section
-            line_pos = search;
-            break;
+        while ((search = strstr(search, name_pat)) != NULL) {
+            if (search >= section_end) break;
+            // Verify it's preceded by "\nN " (threshold + space)
+            char *line_start = search;
+            while (line_start > content && *(line_start-1) != '\n') line_start--;
+            // Check the char after pattern is end/space/paren (not middle of another name)
+            char after = search[name_pat_len];
+            if (after == '\0' || after == '\n' || after == '\r' || after == ' ') {
+                char *line_end = strchr(search, '\n');
+                if (!line_end) line_end = content + file_len;
+                else line_end++; // include the \n
+                // Remove the line
+                int remove_start = (int)(line_start - content);
+                int remove_end = (int)(line_end - content);
+                memmove(content + remove_start, content + remove_end, file_len - remove_end + 1);
+                file_len -= (remove_end - remove_start);
+                // Recompute section_end after removal
+                section_end -= (remove_end - remove_start);
+                search = content + remove_start; // continue from same position
+                continue;
+            }
+            search++;
         }
     }
-    if (line_pos) {
-        // Find end of this line
-        char *line_end = strchr(line_pos + 1, '\n');
-        if (!line_end) line_end = content + file_len;
 
-        // Replace the line
-        int before = (int)(line_pos - content) + 1; // include the \n
-        int after_start = (int)(line_end - content);
-        int entry_len = (int)strlen(entry_line);
-        int new_len = before + entry_len + (file_len - after_start) + 1;
-        char *new_content = malloc(new_len);
-        memcpy(new_content, content, before);
-        memcpy(new_content + before, entry_line, entry_len);
-        memcpy(new_content + before + entry_len, content + after_start, file_len - after_start);
-        new_content[before + entry_len + (file_len - after_start)] = '\0';
-        fb_write_file(path, new_content, (int)strlen(new_content));
-        free(new_content);
-        free(content);
-        fb_log(log, FB_LOG_WARN, "Updated model list: %s", entry_line);
-        return;
+    // Find sorted insert position by threshold number within section
+    char *insert_pos = NULL;
+    {
+        char *line = heading_pos + strlen(heading_pat);
+        while (line < section_end) {
+            if (*line == '\n') { line++; continue; }
+            if (*line == '\r') { line++; continue; }
+            // Parse threshold number at start of line
+            int line_thresh = 0;
+            char *p = line;
+            while (*p >= '0' && *p <= '9') {
+                line_thresh = line_thresh * 10 + (*p - '0');
+                p++;
+            }
+            if (line_thresh > threshold) {
+                insert_pos = line;
+                break;
+            }
+            // Skip to next line
+            char *eol = strchr(line, '\n');
+            if (!eol) break;
+            line = eol + 1;
+        }
     }
 
-    // Back up past trailing newlines, keep one
-    while (section_end > heading_pos && (*(section_end-1) == '\n' || *(section_end-1) == '\r'))
-        section_end--;
-    section_end++; // keep one newline
+    if (!insert_pos) {
+        // Append at end of section — back up past trailing newlines, keep one
+        char *end = section_end;
+        while (end > heading_pos && (*(end-1) == '\n' || *(end-1) == '\r'))
+            end--;
+        end++; // keep one newline
+        insert_pos = end;
+    }
 
-    int insert_at = (int)(section_end - content);
+    int insert_at = (int)(insert_pos - content);
     int entry_len = (int)strlen(entry_line);
-    int new_len = file_len + entry_len + 1;
+    int new_len = file_len + entry_len + 2; // +newline
     char *new_content = malloc(new_len);
     memcpy(new_content, content, insert_at);
     memcpy(new_content + insert_at, entry_line, entry_len);
-    memcpy(new_content + insert_at + entry_len, content + insert_at, file_len - insert_at);
-    new_content[insert_at + entry_len + (file_len - insert_at)] = '\0';
+    new_content[insert_at + entry_len] = '\n';
+    memcpy(new_content + insert_at + entry_len + 1, content + insert_at, file_len - insert_at);
+    new_content[insert_at + entry_len + 1 + (file_len - insert_at)] = '\0';
     fb_write_file(path, new_content, (int)strlen(new_content));
     free(new_content);
     free(content);

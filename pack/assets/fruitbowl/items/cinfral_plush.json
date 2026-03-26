@@ -1,6 +1,6 @@
 {
-  "model": {
-    "type": "minecraft:model",
-    "model": "fruitbowl:item/cinfral_plush"
-  }
+	"model":	{
+		"type":	"minecraft:model",
+		"model":	"fruitbowl:item/cinfral_plush"
+	}
 }
