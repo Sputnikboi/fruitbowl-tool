@@ -7,3 +7,4 @@ c/build*/
 *.zip
 V* - Fruitbowl 4/
 test-pack/
+c/build-win/
