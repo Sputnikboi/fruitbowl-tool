@@ -1,0 +1,23 @@
+=== MASTER CONTEXT ===
+PROJECT: fruitbowl-tool — GUI app for managing Minecraft resource pack "Fruitbowl 4"
+REPO: /home/sputnikboi/Git/fruitbowl-tool/ (github.com/Sputnikboi/fruitbowl-tool)
+PACK: /home/sputnikboi/Git/fruitbowl-tool/pack/ (V37 - the user's working pack)
+SOURCE: /home/sputnikboi/Git/fruitbowl-tool/c/src/ (types.h, model.h/c, pack.h/c, gui.h/c, util.h/c, renderer.h/c, filedialog.h/c, main.c)
+BUILD LINUX: cd /home/sputnikboi/Git/fruitbowl-tool/c/build && make -j$(nproc) && strip fruitbowl_tool
+BUILD WIN: cd /home/sputnikboi/Git/fruitbowl-tool/c/build-win && make -j$(nproc) && x86_64-w64-mingw32-strip fruitbowl_tool.exe
+RELEASE: v2.1.0 at https://github.com/Sputnikboi/fruitbowl-tool/releases/tag/v2.1.0
+
+MODEL LIST: pack/model list.txt — sections like "White Wool:\n1 = Model Name (Author)"
+  Authors stored ONLY in model list.txt, NOT in JSON files.
+
+KEY PACK.C FUNCTIONS:
+- update_dispatch() — gap-fills thresholds, sorted insert
+- remove_from_dispatch() — removes model from dispatch  
+- update_model_list() — dedup by display name, sorted insert
+- remove_from_model_list() — section-scoped removal
+- fb_add_to_pack() — main import
+- fb_delete_model() — remove + delete files
+- fb_peek_next_threshold() — predicts next threshold
+
+GUI DEFINES: FONT_SMALL, FONT_TITLE, PAD, BTN_H, C_PANEL, C_DIM, gui_scale
+LOG: FBLog struct with FB_MAX_LOG_LINES entries, each has type (FB_LOG_HEADER/SUCCESS/WARN/ERROR/INFO) and text

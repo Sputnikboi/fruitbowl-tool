@@ -144,6 +144,8 @@ typedef struct {
 
     // Log
     FBLog       log;
+    int         log_scroll;     // scroll offset (0 = bottom, positive = scrolled up N lines)
+    int         log_last_count; // track when new messages arrive for auto-scroll
 
     // Pack scan results
     FBPackEntry pack_entries[FB_MAX_MODELS];

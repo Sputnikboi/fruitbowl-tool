@@ -115,12 +115,38 @@ static void update_orbital_camera(Camera3D *cam, int viewport_x) {
 }
 
 // ── Log drawing ─────────────────────────────────────────────────────────────
-static void draw_log(FBLog *log, int x, int y, int w, int h) {
+static void draw_log(FBLog *log, int x, int y, int w, int h, FBAppState *s) {
     DrawRectangle(x, y, w, h, (Color){20, 20, 22, 255});
     int line_h = FONT_LABEL + 3;
     int max_lines = h / line_h;
-    int start = log->count > max_lines ? log->count - max_lines : 0;
-    for (int i = start; i < log->count; i++) {
+    if (max_lines < 1) max_lines = 1;
+
+    // Auto-scroll to bottom when new messages arrive
+    if (log->count != s->log_last_count) {
+        s->log_scroll = 0; // reset to bottom
+        s->log_last_count = log->count;
+    }
+
+    // Handle mouse wheel scrolling when hovering over log area
+    Rectangle log_rect = {(float)x, (float)y, (float)w, (float)h};
+    if (CheckCollisionPointRec(GetMousePosition(), log_rect)) {
+        float wheel = GetMouseWheelMove();
+        if (wheel > 0) s->log_scroll += 3; // scroll up
+        if (wheel < 0) s->log_scroll -= 3; // scroll down
+    }
+
+    // Clamp scroll: 0 = showing bottom, max = showing top
+    int max_scroll = log->count > max_lines ? log->count - max_lines : 0;
+    if (s->log_scroll > max_scroll) s->log_scroll = max_scroll;
+    if (s->log_scroll < 0) s->log_scroll = 0;
+
+    int end = log->count - s->log_scroll;
+    int start = end - max_lines;
+    if (start < 0) start = 0;
+
+    // Clip drawing to log area
+    BeginScissorMode(x, y, w, h);
+    for (int i = start; i < end; i++) {
         FBLogEntry *e = &log->entries[i];
         Color c = C_TEXT;
         switch (e->level) {
@@ -132,6 +158,18 @@ static void draw_log(FBLog *log, int x, int y, int w, int h) {
         }
         DrawText(e->text, x + 4, y + 2 + (i - start) * line_h, FONT_LABEL, c);
     }
+
+    // Draw scrollbar if content overflows
+    if (log->count > max_lines) {
+        int bar_x = x + w - 6;
+        float ratio = (float)max_lines / log->count;
+        int bar_h = (int)(h * ratio);
+        if (bar_h < 12) bar_h = 12;
+        float pos_ratio = max_scroll > 0 ? (float)(max_scroll - s->log_scroll) / max_scroll : 0;
+        int bar_y = y + (int)(pos_ratio * (h - bar_h));
+        DrawRectangle(bar_x, bar_y, 4, bar_h, (Color){80, 80, 90, 180});
+    }
+    EndScissorMode();
 }
 
 // ── Label + text field helper ───────────────────────────────────────────────
@@ -257,7 +295,7 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     int log_h = (y + h) - log_top - bottom_h - PAD;
     if (log_h < 40) log_h = 40; // minimum height
     DrawText("Output", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
-    draw_log(&s->log, x + PAD, cy, w - 2*PAD, log_h);
+    draw_log(&s->log, x + PAD, cy, w - 2*PAD, log_h, s);
     cy += log_h + PAD;
 
     // ── Import button ───────────────────────────────────────────────────
@@ -758,7 +796,7 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
 
     // Log
     DrawText("Output", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
-    draw_log(&s->log, x + PAD, cy, w - 2*PAD, h - (cy - y) - PAD);
+    draw_log(&s->log, x + PAD, cy, w - 2*PAD, h - (cy - y) - PAD, s);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1093,7 +1131,7 @@ static void draw_batch_tab(FBAppState *s, int x, int y, int w, int h) {
 
     // Log
     DrawText("Output", x + PAD, cy, FONT_LABEL, C_DIM); cy += FONT_LABEL + 3;
-    draw_log(&s->log, x + PAD, cy, w - 2*PAD, h - (cy - y) - PAD);
+    draw_log(&s->log, x + PAD, cy, w - 2*PAD, h - (cy - y) - PAD, s);
 
     // Batch item dropdown overlay (drawn last so it renders on top)
     if (batch_item_dropdown && batch_dd_count > 0) {

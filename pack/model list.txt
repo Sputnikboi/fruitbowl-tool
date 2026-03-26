@@ -260,6 +260,7 @@ White Wool:
 27 = Teddy Bear (Brok)
 28 = Hampter 2 (Brok)
 29 = Will Doll (Brok - Will)
+30 = Cinfral Plush (Brok)
 31 = Feinberg Doll (Brok)
 32 = Ruden Doll (Brok - Ruden)
 33 = Arbazzu Doll (Brok - Arbazzu)
