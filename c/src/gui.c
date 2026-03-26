@@ -332,6 +332,7 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
                     free(fc);
                 }
             }
+            s->confirm_threshold = fb_peek_next_threshold(s->pack_path, s->item_type, name);
             s->confirm_dialog_open = true;
             import_cooldown_until = GetTime() + 1.0;
         }
@@ -673,17 +674,18 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
 
     if (GuiButton((Rectangle){(float)list_x, by, (float)btn_w, BTN_H}, "Delete")) {
         if (s->manage_sel_count > 0) {
-            fb_log_clear(&s->log);
-            // Delete in reverse order to avoid index shifting
-            for (int i = s->pack_entry_count - 1; i >= 0; i--) {
+            // Build summary of models to delete
+            s->delete_confirm_names[0] = '\0';
+            int count = 0;
+            for (int i = 0; i < s->pack_entry_count; i++) {
                 if (!s->manage_selected[i]) continue;
                 FBPackEntry *e = &s->pack_entries[i];
-                fb_log(&s->log, FB_LOG_HEADER, "Deleting %s...", e->model_name);
-                fb_delete_model(s->pack_path, e->real_item_type, e->model_name, e->threshold, &s->log);
+                if (count > 0) strncat(s->delete_confirm_names, ", ", sizeof(s->delete_confirm_names) - strlen(s->delete_confirm_names) - 1);
+                strncat(s->delete_confirm_names, e->model_name, sizeof(s->delete_confirm_names) - strlen(s->delete_confirm_names) - 1);
+                count++;
             }
-            s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
-            memset(s->manage_selected, 0, sizeof(s->manage_selected));
-            s->manage_sel_count = 0; s->manage_sel_last = -1;
+            s->delete_confirm_count = count;
+            s->delete_confirm_open = true;
         }
     }
 
@@ -1083,6 +1085,7 @@ static void draw_batch_tab(FBAppState *s, int x, int y, int w, int h) {
             s->confirm_batch_count = s->batch_count;
             s->confirm_model_exists = false;
             s->confirm_item_has_model = false;
+            s->confirm_threshold = 0; // batch: multiple thresholds
             s->confirm_dialog_open = true;
         }
     }
@@ -1167,11 +1170,74 @@ static void draw_heading_dialog(FBAppState *s, int panel_w) {
 // Duplicate Dialog (modal overlay)
 // ═════════════════════════════════════════════════════════════════════════════
 
+static void draw_delete_confirm(FBAppState *s, int panel_w) {
+    int sw = GetScreenWidth(), sh = GetScreenHeight();
+    DrawRectangle(0, 0, sw, sh, (Color){0,0,0,150});
+
+    int dw = (int)(380 * gui_scale), dh = (int)(200 * gui_scale);
+    int dx = (panel_w - dw) / 2, dy = (sh - dh) / 2;
+    DrawRectangle(dx, dy, dw, dh, C_PANEL);
+    DrawRectangleLines(dx, dy, dw, dh, (Color){255, 80, 80, 255});
+
+    int cy = dy + PAD;
+    DrawText("Confirm Delete", dx + PAD, cy, FONT_TITLE, (Color){255, 80, 80, 255});
+    cy += FONT_TITLE + 12;
+
+    DrawText(TextFormat("Delete %d model%s?", s->delete_confirm_count,
+             s->delete_confirm_count == 1 ? "" : "s"),
+             dx + PAD, cy, FONT_SMALL, RAYWHITE);
+    cy += FONT_SMALL + 8;
+
+    // Show model names (truncated if too long)
+    const char *names = s->delete_confirm_names;
+    int max_text_w = dw - 2 * PAD;
+    int text_len = MeasureText(names, FONT_SMALL);
+    if (text_len > max_text_w) {
+        // Truncate with ellipsis
+        char trunc[256];
+        strncpy(trunc, names, sizeof(trunc) - 4);
+        trunc[sizeof(trunc) - 4] = '\0';
+        while (strlen(trunc) > 3 && MeasureText(trunc, FONT_SMALL) > max_text_w - MeasureText("...", FONT_SMALL)) {
+            trunc[strlen(trunc) - 1] = '\0';
+        }
+        strcat(trunc, "...");
+        DrawText(trunc, dx + PAD, cy, FONT_SMALL, C_DIM);
+    } else {
+        DrawText(names, dx + PAD, cy, FONT_SMALL, C_DIM);
+    }
+    cy += FONT_SMALL + 6;
+
+    DrawText("This cannot be undone.", dx + PAD, cy, FONT_SMALL, (Color){255, 180, 0, 255});
+
+    // Buttons at bottom
+    int btn_y = dy + dh - BTN_H - PAD;
+    int btn_w2 = (dw - 3*PAD) / 2;
+    if (GuiButton((Rectangle){(float)(dx+PAD), (float)btn_y, (float)btn_w2, BTN_H}, "Delete")) {
+        s->delete_confirm_open = false;
+        fb_log_clear(&s->log);
+        for (int i = s->pack_entry_count - 1; i >= 0; i--) {
+            if (!s->manage_selected[i]) continue;
+            FBPackEntry *e = &s->pack_entries[i];
+            fb_log(&s->log, FB_LOG_HEADER, "Deleting %s...", e->model_name);
+            fb_delete_model(s->pack_path, e->real_item_type, e->model_name, e->threshold, &s->log);
+        }
+        s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
+        memset(s->manage_selected, 0, sizeof(s->manage_selected));
+        s->manage_sel_count = 0; s->manage_sel_last = -1;
+        PollInputEvents();
+    }
+    if (GuiButton((Rectangle){(float)(dx+PAD+btn_w2+PAD), (float)btn_y, (float)btn_w2, BTN_H}, "Cancel")) {
+        s->delete_confirm_open = false;
+        PollInputEvents();
+    }
+    if (IsKeyPressed(KEY_ESCAPE)) s->delete_confirm_open = false;
+}
+
 static void draw_confirm_dialog(FBAppState *s, int panel_w) {
     int sw = GetScreenWidth(), sh = GetScreenHeight();
     DrawRectangle(0, 0, sw, sh, (Color){0,0,0,150});
 
-    int dw = (int)(380 * gui_scale), dh = (int)(240 * gui_scale);
+    int dw = (int)(380 * gui_scale), dh = (int)(260 * gui_scale);
     int dx = (panel_w - dw) / 2, dy = (sh - dh) / 2;
     DrawRectangle(dx, dy, dw, dh, C_PANEL);
     DrawRectangleLines(dx, dy, dw, dh, C_BORDER);
@@ -1231,6 +1297,12 @@ static void draw_confirm_dialog(FBAppState *s, int panel_w) {
     if (s->confirm_heading[0]) {
         DrawText("Section:", dx + PAD, cy, FONT_SMALL, C_DIM);
         DrawText(s->confirm_heading, dx + PAD + label_w, cy, FONT_SMALL, RAYWHITE);
+        cy += FONT_SMALL + 6;
+    }
+
+    if (s->confirm_threshold > 0) {
+        DrawText("Number:", dx + PAD, cy, FONT_SMALL, C_DIM);
+        DrawText(TextFormat("#%d", s->confirm_threshold), dx + PAD + label_w, cy, FONT_SMALL, RAYWHITE);
         cy += FONT_SMALL + 6;
     }
 
@@ -1381,6 +1453,7 @@ static void draw_dup_dialog(FBAppState *s, int panel_w) {
             if (heading) strncpy(s->confirm_heading, heading, FB_MAX_NAME - 1);
             s->confirm_model_exists = true;
             s->confirm_item_has_model = false;
+            s->confirm_threshold = fb_peek_next_threshold(s->pack_path, s->dup_dialog_value, e->model_name);
             s->confirm_dialog_open = true;
         }
     }
@@ -1523,6 +1596,9 @@ void fb_draw_gui(FBAppState *s) {
         }
         if (s->dup_dialog_open) {
             draw_dup_dialog(s, panel_w);
+        }
+        if (s->delete_confirm_open) {
+            draw_delete_confirm(s, panel_w);
         }
     }
 

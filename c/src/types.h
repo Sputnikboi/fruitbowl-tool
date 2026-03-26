@@ -200,6 +200,12 @@ typedef struct {
     bool        confirm_model_exists;   // model/texture already in pack
     bool        confirm_item_has_model; // item dispatch already has this model
     int         confirm_batch_count;    // number of files in batch
+    int         confirm_threshold;      // threshold that will be assigned
+
+    // Delete confirmation dialog
+    bool        delete_confirm_open;
+    char        delete_confirm_names[1024]; // summary of models to delete
+    int         delete_confirm_count;
 
     // Manage inline author editing
     int         manage_editing_author;  // index being edited, -1 = none

@@ -37,6 +37,12 @@ bool fb_update_author(const char *pack_root, const char *mc_item_id,
                       int threshold, const char *display_name,
                       const char *new_author, FBLog *log);
 
+
+// ── Peek at the next threshold that would be assigned ───────────────────────
+// Returns the threshold number a new import would get, or -1 if model
+// already exists on this item (would be an UPDATE).
+int fb_peek_next_threshold(const char *pack_root, const char *mc_item_id,
+                           const char *model_name);
 // ── Ensure atlas is configured ──────────────────────────────────────────────
 void fb_ensure_atlas(const char *pack_root, FBLog *log);
 

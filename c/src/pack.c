@@ -358,6 +358,51 @@ static int update_dispatch(const char *pack_root, const char *mc_item_id,
     return threshold;
 }
 
+// Peek at the next threshold without modifying anything.
+// Returns -1 if model already exists on this item.
+int fb_peek_next_threshold(const char *pack_root, const char *mc_item_id,
+                           const char *model_name) {
+    char fullpath[FB_MAX_PATH];
+    snprintf(fullpath, sizeof(fullpath), "%s/%s/%s.json",
+             pack_root, MC_ITEMS_DIR_REL, mc_item_id);
+
+    if (!fb_file_exists(fullpath)) return 1; // first entry
+
+    cJSON *root = load_json_file(fullpath);
+    if (!root) return 1;
+
+    cJSON *model = cJSON_GetObjectItem(root, "model");
+    cJSON *entries = model ? cJSON_GetObjectItem(model, "entries") : NULL;
+    if (!entries || cJSON_GetArraySize(entries) == 0) {
+        cJSON_Delete(root);
+        return 1;
+    }
+
+    bool used[4096] = {false};
+    int max_threshold = 0;
+    cJSON *entry;
+    cJSON_ArrayForEach(entry, entries) {
+        int t = cJSON_GetObjectItem(entry, "threshold")->valueint;
+        if (t > 0 && t < 4096) used[t] = true;
+        if (t > max_threshold) max_threshold = t;
+
+        cJSON *m = cJSON_GetObjectItem(entry, "model");
+        const char *existing = extract_model_ref(m);
+        if (existing && strcmp(existing, model_name) == 0) {
+            cJSON_Delete(root);
+            return -1; // already on this item
+        }
+    }
+
+    cJSON_Delete(root);
+
+    // Find first gap
+    for (int t = 1; t <= max_threshold; t++) {
+        if (!used[t]) return t;
+    }
+    return max_threshold + 1;
+}
+
 // Remove a model from a dispatch file. Returns true if removed.
 static bool remove_from_dispatch(const char *pack_root, const char *mc_item_id,
                                  const char *model_name) {
