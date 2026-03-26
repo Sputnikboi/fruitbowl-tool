@@ -272,20 +272,10 @@ bool fb_load_bbmodel_textures(const char *bbmodel_path, FBModel *model) {
     int count = cJSON_GetArraySize(textures);
     if (count > FB_MAX_TEXTURES) count = FB_MAX_TEXTURES;
 
-    int max_id = 0;
     for (int i = 0; i < count; i++) {
         cJSON *tex = cJSON_GetArrayItem(textures, i);
         cJSON *source = cJSON_GetObjectItem(tex, "source");
         if (!source || !cJSON_IsString(source)) continue;
-
-        // Get texture ID (Blockbench uses "id" field, not array index)
-        cJSON *id_val = cJSON_GetObjectItem(tex, "id");
-        int tid = i; // fallback to array index
-        if (id_val) {
-            if (cJSON_IsNumber(id_val)) tid = id_val->valueint;
-            else if (cJSON_IsString(id_val)) tid = atoi(id_val->valuestring);
-        }
-        if (tid < 0 || tid >= FB_MAX_TEXTURES) continue;
 
         const char *src = source->valuestring;
         const char *prefix = "data:image/png;base64,";
@@ -296,18 +286,17 @@ bool fb_load_bbmodel_textures(const char *bbmodel_path, FBModel *model) {
         unsigned char *png_bytes = b64_decode(b64_data, &png_len);
         if (!png_bytes) continue;
 
-        // Load PNG from memory into raylib texture, keyed by texture ID
+        // Load PNG from memory into raylib texture
         Image img = LoadImageFromMemory(".png", png_bytes, png_len);
         free(png_bytes);
 
         if (img.data) {
-            model->textures[tid] = LoadTextureFromImage(img);
+            model->textures[i] = LoadTextureFromImage(img);
             UnloadImage(img);
         }
-        if (tid + 1 > max_id) max_id = tid + 1;
     }
 
-    model->texture_count = max_id;
+    model->texture_count = count;
     model->textures_loaded = true;
 
     cJSON_Delete(root);
