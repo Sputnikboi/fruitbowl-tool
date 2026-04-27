@@ -44,6 +44,97 @@ static unsigned char *b64_decode(const char *src, int *out_len) {
     return out;
 }
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+// ── Rotation math (for baking multi-axis rotations) ─────────────────────────
+
+static void mat3_mul_vec(float out[3], float m[3][3], const float v[3]) {
+    out[0] = m[0][0]*v[0] + m[0][1]*v[1] + m[0][2]*v[2];
+    out[1] = m[1][0]*v[0] + m[1][1]*v[1] + m[1][2]*v[2];
+    out[2] = m[2][0]*v[0] + m[2][1]*v[1] + m[2][2]*v[2];
+}
+
+static void mat3_mul(float out[3][3], float a[3][3], float b[3][3]) {
+    float tmp[3][3];
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++)
+            tmp[i][j] = a[i][0]*b[0][j] + a[i][1]*b[1][j] + a[i][2]*b[2][j];
+    memcpy(out, tmp, sizeof(tmp));
+}
+
+static void mat3_rot_axis(float m[3][3], char axis, float deg) {
+    float rad = (float)(deg * M_PI / 180.0);
+    float c = cosf(rad), s = sinf(rad);
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++)
+            m[i][j] = (i == j) ? 1.0f : 0.0f;
+    switch (axis) {
+        case 'x': m[1][1]= c; m[1][2]=-s; m[2][1]= s; m[2][2]=c; break;
+        case 'y': m[0][0]= c; m[0][2]= s; m[2][0]=-s; m[2][2]=c; break;
+        case 'z': m[0][0]= c; m[0][1]=-s; m[1][0]= s; m[1][1]=c; break;
+    }
+}
+
+// Bake a multi-axis bbmodel rotation into single-axis MC rotation + adjusted geometry.
+// Picks the dominant axis for MC, applies the residual rotation to from/to as an AABB.
+static void bake_multiaxis_rotation(FBElement *elem, float rx, float ry, float rz) {
+    float ax = fabsf(rx), ay = fabsf(ry), az = fabsf(rz);
+    char  dom_axis;
+    float dom_angle;
+    if (az >= ax && az >= ay)      { dom_axis = 'z'; dom_angle = rz; }
+    else if (ay >= ax && ay >= az) { dom_axis = 'y'; dom_angle = ry; }
+    else                           { dom_axis = 'x'; dom_angle = rx; }
+
+    elem->rot_axis  = dom_axis;
+    elem->rot_angle = dom_angle;
+
+    // Full rotation: R = Rz · Ry · Rx  (Blockbench ZYX extrinsic)
+    float Rx[3][3], Ry[3][3], Rz[3][3], tmp[3][3], R_full[3][3];
+    mat3_rot_axis(Rx, 'x', rx);
+    mat3_rot_axis(Ry, 'y', ry);
+    mat3_rot_axis(Rz, 'z', rz);
+    mat3_mul(tmp,    Ry, Rx);
+    mat3_mul(R_full, Rz, tmp);
+
+    // Inverse of the dominant-axis rotation
+    float R_mc_inv[3][3];
+    mat3_rot_axis(R_mc_inv, dom_axis, -dom_angle);
+
+    // Residual = R_mc_inv · R_full  (baked into geometry)
+    float R_res[3][3];
+    mat3_mul(R_res, R_mc_inv, R_full);
+
+    // Rotate 8 cube corners by R_res around origin, compute new AABB
+    float ox = elem->rot_origin[0], oy = elem->rot_origin[1], oz = elem->rot_origin[2];
+    float fx = elem->from[0], fy = elem->from[1], fz = elem->from[2];
+    float tx = elem->to[0],   ty = elem->to[1],   tz = elem->to[2];
+
+    float new_min[3] = { 1e9f,  1e9f,  1e9f};
+    float new_max[3] = {-1e9f, -1e9f, -1e9f};
+
+    for (int ix = 0; ix < 2; ix++)
+    for (int iy = 0; iy < 2; iy++)
+    for (int iz = 0; iz < 2; iz++) {
+        float v[3] = {
+            (ix ? tx : fx) - ox,
+            (iy ? ty : fy) - oy,
+            (iz ? tz : fz) - oz
+        };
+        float rv[3];
+        mat3_mul_vec(rv, R_res, v);
+        for (int a = 0; a < 3; a++) {
+            float p = rv[a] + (a==0 ? ox : a==1 ? oy : oz);
+            if (p < new_min[a]) new_min[a] = p;
+            if (p > new_max[a]) new_max[a] = p;
+        }
+    }
+
+    elem->from[0] = new_min[0]; elem->from[1] = new_min[1]; elem->from[2] = new_min[2];
+    elem->to[0]   = new_max[0]; elem->to[1]   = new_max[1]; elem->to[2]   = new_max[2];
+}
+
 // ── Face name to index mapping ──────────────────────────────────────────────
 
 static int face_index(const char *name) {
@@ -153,12 +244,19 @@ bool fb_parse_bbmodel(const char *path, FBModel *out) {
             float rx = (float)cJSON_GetArrayItem(rot, 0)->valuedouble;
             float ry = (float)cJSON_GetArrayItem(rot, 1)->valuedouble;
             float rz = (float)cJSON_GetArrayItem(rot, 2)->valuedouble;
-            // Pick first non-zero axis
-            if (rx != 0) { elem->rot_angle = rx; elem->rot_axis = 'x'; }
-            else if (ry != 0) { elem->rot_angle = ry; elem->rot_axis = 'y'; }
-            else if (rz != 0) { elem->rot_angle = rz; elem->rot_axis = 'z'; }
             for (int i = 0; i < 3; i++)
                 elem->rot_origin[i] = (float)cJSON_GetArrayItem(origin, i)->valuedouble;
+
+            int axis_count = (rx != 0) + (ry != 0) + (rz != 0);
+            if (axis_count > 1) {
+                // Multi-axis: pick dominant axis, bake residual into geometry
+                bake_multiaxis_rotation(elem, rx, ry, rz);
+            } else {
+                // Single axis (or none): direct mapping
+                if (rx != 0)      { elem->rot_angle = rx; elem->rot_axis = 'x'; }
+                else if (ry != 0) { elem->rot_angle = ry; elem->rot_axis = 'y'; }
+                else if (rz != 0) { elem->rot_angle = rz; elem->rot_axis = 'z'; }
+            }
         }
 
         // Faces
