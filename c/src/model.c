@@ -77,8 +77,17 @@ static void mat3_rot_axis(float m[3][3], char axis, float deg) {
     }
 }
 
+// Clamp angle to MC's valid range [-45, 45]
+static float clamp_mc_angle(float angle) {
+    if (angle > 45.0f) return 45.0f;
+    if (angle < -45.0f) return -45.0f;
+    return angle;
+}
+
 // Bake a multi-axis bbmodel rotation into single-axis MC rotation + adjusted geometry.
-// Picks the dominant axis for MC, applies the residual rotation to from/to as an AABB.
+// Picks the dominant axis for MC, clamps to [-45,45], and bakes the residual rotation
+// into element position using center-preserve (keeps original dimensions, shifts center).
+// This avoids the AABB inflation problem where thin/flat elements become thick boxes.
 static void bake_multiaxis_rotation(FBElement *elem, float rx, float ry, float rz) {
     float ax = fabsf(rx), ay = fabsf(ry), az = fabsf(rz);
     char  dom_axis;
@@ -87,10 +96,11 @@ static void bake_multiaxis_rotation(FBElement *elem, float rx, float ry, float r
     else if (ay >= ax && ay >= az) { dom_axis = 'y'; dom_angle = ry; }
     else                           { dom_axis = 'x'; dom_angle = rx; }
 
+    float mc_angle = clamp_mc_angle(dom_angle);
     elem->rot_axis  = dom_axis;
-    elem->rot_angle = dom_angle;
+    elem->rot_angle = mc_angle;
 
-    // Full rotation: R = Rz · Ry · Rx  (Blockbench ZYX extrinsic)
+    // Full rotation: R = Rz * Ry * Rx  (Blockbench ZYX extrinsic)
     float Rx[3][3], Ry[3][3], Rz[3][3], tmp[3][3], R_full[3][3];
     mat3_rot_axis(Rx, 'x', rx);
     mat3_rot_axis(Ry, 'y', ry);
@@ -98,41 +108,37 @@ static void bake_multiaxis_rotation(FBElement *elem, float rx, float ry, float r
     mat3_mul(tmp,    Ry, Rx);
     mat3_mul(R_full, Rz, tmp);
 
-    // Inverse of the dominant-axis rotation
+    // Inverse of the MC rotation (clamped angle)
     float R_mc_inv[3][3];
-    mat3_rot_axis(R_mc_inv, dom_axis, -dom_angle);
+    mat3_rot_axis(R_mc_inv, dom_axis, -mc_angle);
 
-    // Residual = R_mc_inv · R_full  (baked into geometry)
+    // Residual = R_mc_inv * R_full  (what MC cannot handle, bake into geometry)
     float R_res[3][3];
     mat3_mul(R_res, R_mc_inv, R_full);
 
-    // Rotate 8 cube corners by R_res around origin, compute new AABB
+    // Center-preserve: rotate the element center by R_res around origin,
+    // but keep original from/to dimensions intact.
     float ox = elem->rot_origin[0], oy = elem->rot_origin[1], oz = elem->rot_origin[2];
-    float fx = elem->from[0], fy = elem->from[1], fz = elem->from[2];
-    float tx = elem->to[0],   ty = elem->to[1],   tz = elem->to[2];
+    float half[3] = {
+        (elem->to[0] - elem->from[0]) * 0.5f,
+        (elem->to[1] - elem->from[1]) * 0.5f,
+        (elem->to[2] - elem->from[2]) * 0.5f
+    };
+    float center[3] = {
+        elem->from[0] + half[0] - ox,
+        elem->from[1] + half[1] - oy,
+        elem->from[2] + half[2] - oz
+    };
 
-    float new_min[3] = { 1e9f,  1e9f,  1e9f};
-    float new_max[3] = {-1e9f, -1e9f, -1e9f};
+    float new_center[3];
+    mat3_mul_vec(new_center, R_res, center);
 
-    for (int ix = 0; ix < 2; ix++)
-    for (int iy = 0; iy < 2; iy++)
-    for (int iz = 0; iz < 2; iz++) {
-        float v[3] = {
-            (ix ? tx : fx) - ox,
-            (iy ? ty : fy) - oy,
-            (iz ? tz : fz) - oz
-        };
-        float rv[3];
-        mat3_mul_vec(rv, R_res, v);
-        for (int a = 0; a < 3; a++) {
-            float p = rv[a] + (a==0 ? ox : a==1 ? oy : oz);
-            if (p < new_min[a]) new_min[a] = p;
-            if (p > new_max[a]) new_max[a] = p;
-        }
-    }
-
-    elem->from[0] = new_min[0]; elem->from[1] = new_min[1]; elem->from[2] = new_min[2];
-    elem->to[0]   = new_max[0]; elem->to[1]   = new_max[1]; elem->to[2]   = new_max[2];
+    elem->from[0] = new_center[0] + ox - half[0];
+    elem->from[1] = new_center[1] + oy - half[1];
+    elem->from[2] = new_center[2] + oz - half[2];
+    elem->to[0]   = new_center[0] + ox + half[0];
+    elem->to[1]   = new_center[1] + oy + half[1];
+    elem->to[2]   = new_center[2] + oz + half[2];
 }
 
 // ── Face name to index mapping ──────────────────────────────────────────────
@@ -253,9 +259,9 @@ bool fb_parse_bbmodel(const char *path, FBModel *out) {
                 bake_multiaxis_rotation(elem, rx, ry, rz);
             } else {
                 // Single axis (or none): direct mapping
-                if (rx != 0)      { elem->rot_angle = rx; elem->rot_axis = 'x'; }
-                else if (ry != 0) { elem->rot_angle = ry; elem->rot_axis = 'y'; }
-                else if (rz != 0) { elem->rot_angle = rz; elem->rot_axis = 'z'; }
+                if (rx != 0)      { elem->rot_angle = clamp_mc_angle(rx); elem->rot_axis = 'x'; }
+                else if (ry != 0) { elem->rot_angle = clamp_mc_angle(ry); elem->rot_axis = 'y'; }
+                else if (rz != 0) { elem->rot_angle = clamp_mc_angle(rz); elem->rot_axis = 'z'; }
             }
         }
 
