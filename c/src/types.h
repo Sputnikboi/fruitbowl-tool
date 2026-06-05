@@ -1,4 +1,5 @@
 #ifndef FB_TYPES_H
+#include <time.h>
 #define FB_TYPES_H
 
 #include "raylib.h"
@@ -81,6 +82,8 @@ typedef struct {
     bool has_texture;
     bool has_model;
     bool has_item_def;
+    time_t created_at;
+    time_t updated_at;
 } FBPackEntry;
 
 // ── Log messages ────────────────────────────────────────────────────────────

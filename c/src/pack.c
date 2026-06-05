@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <math.h>
@@ -976,17 +977,29 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
         cJSON_Delete(throw_out);
     }
 
-    // 3 — Fruitbowl item def
-    cJSON *item_def = cJSON_CreateObject();
-    cJSON *item_model = cJSON_AddObjectToObject(item_def, "model");
-    cJSON_AddStringToObject(item_model, "type", "minecraft:model");
-    cJSON_AddStringToObject(item_model, "model", TextFormat("fruitbowl:item/%s", name));
-
+    // 3 — Fruitbowl item def (with timestamps)
     char item_path[FB_MAX_PATH];
     snprintf(item_path, sizeof(item_path), "%s/%s/%s.json", pack_root, FB_ITEMS_DIR, name);
     char items_dir[FB_MAX_PATH];
     fb_path_join(items_dir, sizeof(items_dir), pack_root, FB_ITEMS_DIR);
     fb_ensure_dir(items_dir);
+
+    // Preserve created_at from existing item def if updating
+    time_t created_at = time(NULL);
+    cJSON *existing_def = load_json_file(item_path);
+    if (existing_def) {
+        cJSON *ca = cJSON_GetObjectItem(existing_def, "created_at");
+        if (ca && cJSON_IsNumber(ca)) created_at = (time_t)ca->valuedouble;
+        cJSON_Delete(existing_def);
+    }
+
+    cJSON *item_def = cJSON_CreateObject();
+    cJSON *item_model = cJSON_AddObjectToObject(item_def, "model");
+    cJSON_AddStringToObject(item_model, "type", "minecraft:model");
+    cJSON_AddStringToObject(item_model, "model", TextFormat("fruitbowl:item/%s", name));
+    cJSON_AddNumberToObject(item_def, "created_at", (double)created_at);
+    cJSON_AddNumberToObject(item_def, "updated_at", (double)time(NULL));
+
     save_json_file(item_path, item_def);
     fb_log(log, FB_LOG_SUCCESS, "Item -> %s.json", name);
     cJSON_Delete(item_def);
@@ -1172,6 +1185,18 @@ int fb_scan_pack(const char *pack_root, FBPackEntry *entries, int max_entries) {
             pe->has_model = fb_file_exists(check);
             snprintf(check, sizeof(check), "%s/%s/%s.json", pack_root, FB_ITEMS_DIR, ref);
             pe->has_item_def = fb_file_exists(check);
+
+            // Read timestamps from item def
+            if (pe->has_item_def) {
+                cJSON *idef = load_json_file(check);
+                if (idef) {
+                    cJSON *ca = cJSON_GetObjectItem(idef, "created_at");
+                    cJSON *ua = cJSON_GetObjectItem(idef, "updated_at");
+                    if (ca && cJSON_IsNumber(ca)) pe->created_at = (time_t)ca->valuedouble;
+                    if (ua && cJSON_IsNumber(ua)) pe->updated_at = (time_t)ua->valuedouble;
+                    cJSON_Delete(idef);
+                }
+            }
 
             count++;
         }

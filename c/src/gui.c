@@ -1262,11 +1262,9 @@ static void draw_delete_confirm(FBAppState *s, int panel_w) {
         s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
         memset(s->manage_selected, 0, sizeof(s->manage_selected));
         s->manage_sel_count = 0; s->manage_sel_last = -1;
-        PollInputEvents();
     }
     if (GuiButton((Rectangle){(float)(dx+PAD+btn_w2+PAD), (float)btn_y, (float)btn_w2, BTN_H}, "Cancel")) {
         s->delete_confirm_open = false;
-        PollInputEvents();
     }
     if (IsKeyPressed(KEY_ESCAPE)) s->delete_confirm_open = false;
 }

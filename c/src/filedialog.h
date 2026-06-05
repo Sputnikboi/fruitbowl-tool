@@ -11,4 +11,7 @@ bool fb_pick_folder(char *out_path, int out_size);
 // Open a native file picker for .bbmodel files.
 bool fb_pick_bbmodel(char *out_path, int out_size);
 
+// Returns true briefly after a dialog closes, used to suppress stale clicks.
+bool fb_dialog_just_closed(void);
+
 #endif
