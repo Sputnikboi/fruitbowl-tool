@@ -8,6 +8,7 @@
 #include "raygui.h"
 
 #include "filedialog.h"
+#include <time.h>
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
@@ -478,6 +479,8 @@ static int compare_entries(const void *a, const void *b) {
             bool b_ok = eb->has_texture && eb->has_model && eb->has_item_def;
             cmp = (int)a_ok - (int)b_ok;
         } break;
+        case 5: cmp = (ea->created_at > eb->created_at) - (ea->created_at < eb->created_at); break;
+        case 6: cmp = (ea->updated_at > eb->updated_at) - (ea->updated_at < eb->updated_at); break;
     }
     return sort_asc_g ? cmp : -cmp;
 }
@@ -530,7 +533,9 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
     int list_w = w - 2*PAD;
     int col_num = (int)(35 * gui_scale);
     int col_status = (int)(35 * gui_scale);
-    int remaining = list_w - col_num - col_status;
+    int col_added = (int)(75 * gui_scale);
+    int col_updated = (int)(75 * gui_scale);
+    int remaining = list_w - col_num - col_status - col_added - col_updated;
     int col_type = remaining * 22 / 100;
     int col_name = remaining * 40 / 100;
     int col_author = remaining - col_type - col_name;
@@ -541,8 +546,9 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
     struct { const char *label; int width; int col_id; } hdrs[] = {
         {"Type", col_type, 0}, {"Model", col_name, 1}, {"#", col_num, 2},
         {"Author", col_author, 3}, {"OK", col_status, 4},
+        {"Added", col_added, 5}, {"Updated", col_updated, 6},
     };
-    for (int hi = 0; hi < 5; hi++) {
+    for (int hi = 0; hi < 7; hi++) {
         Rectangle hr = {(float)cx, (float)cy, (float)hdrs[hi].width, (float)ROW_H};
         bool hov = CheckCollisionPointRec(GetMousePosition(), hr);
         const char *sort_ind = "";
@@ -687,6 +693,21 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
         }
         cx += col_author;
         DrawText(all_ok ? "OK" : "!!", cx, ty, FONT_SMALL, all_ok ? C_GREEN : C_RED);
+        cx += col_status;
+
+        // Timestamp columns
+        if (e->created_at) {
+            struct tm *tm_ca = localtime(&e->created_at);
+            DrawText(TextFormat("%02d/%02d/%02d", tm_ca->tm_mday, tm_ca->tm_mon+1, tm_ca->tm_year%100),
+                     cx, ty, FONT_SMALL, C_DIM);
+        } else { DrawText("-", cx, ty, FONT_SMALL, C_DIM); }
+        cx += col_added;
+
+        if (e->updated_at) {
+            struct tm *tm_ua = localtime(&e->updated_at);
+            DrawText(TextFormat("%02d/%02d/%02d", tm_ua->tm_mday, tm_ua->tm_mon+1, tm_ua->tm_year%100),
+                     cx, ty, FONT_SMALL, C_DIM);
+        } else { DrawText("-", cx, ty, FONT_SMALL, C_DIM); }
 
         row_count++;
     }
