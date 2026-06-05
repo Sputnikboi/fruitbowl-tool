@@ -2279,7 +2279,7 @@ static int dialogPresent(void)
                 while ( fgets( lBuff , sizeof( lBuff ) , lIn ) != NULL )
                 {}
                 _pclose( lIn ) ;
-                if ( lBuff[strlen( lBuff ) -1] == '\n' )
+                if ( strlen( lBuff ) && lBuff[strlen( lBuff ) -1] == '\n' )
                 {
                         lBuff[strlen( lBuff ) -1] = '\0' ;
                 }
@@ -2390,7 +2390,7 @@ static int messageBoxWinConsole(
         {}
         fclose(lIn);
         remove(lDialogFile);
-    if ( lBuff[strlen( lBuff ) -1] == '\n' )
+    if ( strlen( lBuff ) && lBuff[strlen( lBuff ) -1] == '\n' )
     {
         lBuff[strlen( lBuff ) -1] = '\0' ;
     }
@@ -3293,7 +3293,7 @@ static int detectPresence( char const * aExecutable )
       pclose( lIn ) ;
 
 #ifdef _GNU_SOURCE /*to bypass this, just comment out "#define _GNU_SOURCE" at the top of the file*/
-      if ( lBuff[strlen( lBuff ) -1] == '\n' ) lBuff[strlen( lBuff ) -1] = '\0' ;
+      if ( strlen( lBuff ) && lBuff[strlen( lBuff ) -1] == '\n' ) lBuff[strlen( lBuff ) -1] = '\0' ;
       lAllocatedCharString = realpath(lBuff,NULL); /*same as canonicalize_file_name*/
       lSubstringUndetected = ! strstr(lAllocatedCharString, aExecutable);
       free(lAllocatedCharString);
@@ -5160,7 +5160,7 @@ my \\$notificationsObject = \\$notificationsService->get_object('/org/freedeskto
         pclose( lIn ) ;
 
         /* printf( "lBuff: %s len: %lu \n" , lBuff , strlen(lBuff) ) ; */
-        if ( lBuff[strlen( lBuff ) -1] == '\n' )
+        if ( strlen( lBuff ) && lBuff[strlen( lBuff ) -1] == '\n' )
         {
                 lBuff[strlen( lBuff ) -1] = '\0' ;
         }
@@ -5889,7 +5889,7 @@ frontmost of process \\\"Python\\\" to true' ''');");
                         free(lDialogString);
                         return NULL ;
                 }
-                if ( lBuff[strlen( lBuff ) -1] == '\n' )
+                if ( strlen( lBuff ) && lBuff[strlen( lBuff ) -1] == '\n' )
                 {
                         lBuff[strlen( lBuff ) -1] = '\0' ;
                 }
@@ -5932,7 +5932,7 @@ frontmost of process \\\"Python\\\" to true' ''');");
 
         /* printf( "len Buff: %lu\n" , strlen(lBuff) ) ; */
         /* printf( "lBuff0: %s\n" , lBuff ) ; */
-        if ( lBuff[strlen( lBuff ) -1] == '\n' )
+        if ( strlen( lBuff ) && lBuff[strlen( lBuff ) -1] == '\n' )
         {
                 lBuff[strlen( lBuff ) -1] = '\0' ;
         }
@@ -6384,7 +6384,7 @@ char * tinyfd_saveFileDialog(
     while ( fgets( lBuff , sizeof( lBuff ) , lIn ) != NULL )
     {}
     pclose( lIn ) ;
-    if ( lBuff[strlen( lBuff ) -1] == '\n' )
+    if ( strlen( lBuff ) && lBuff[strlen( lBuff ) -1] == '\n' )
     {
         lBuff[strlen( lBuff ) -1] = '\0' ;
     }
@@ -6923,7 +6923,7 @@ frontmost of process \\\"Python\\\" to true' ''');");
                 p += strlen( p );
         }
     pclose( lIn ) ;
-    if ( lBuff[strlen( lBuff ) -1] == '\n' )
+    if ( strlen( lBuff ) && lBuff[strlen( lBuff ) -1] == '\n' )
     {
         lBuff[strlen( lBuff ) -1] = '\0' ;
     }
@@ -7250,7 +7250,7 @@ frontmost of process \\\"Python\\\" to true' ''');");
         while ( fgets( lBuff , sizeof( lBuff ) , lIn ) != NULL )
         {}
         pclose( lIn ) ;
-    if ( lBuff[strlen( lBuff ) -1] == '\n' )
+    if ( strlen( lBuff ) && lBuff[strlen( lBuff ) -1] == '\n' )
     {
         lBuff[strlen( lBuff ) -1] = '\0' ;
     }
@@ -7527,7 +7527,7 @@ frontmost of process \\\"Python\\\" to true' ''');");
     }
         /* printf( "len Buff: %lu\n" , strlen(lBuff) ) ; */
         /* printf( "lBuff0: %s\n" , lBuff ) ; */
-    if ( lBuff[strlen( lBuff ) -1] == '\n' )
+    if ( strlen( lBuff ) && lBuff[strlen( lBuff ) -1] == '\n' )
     {
         lBuff[strlen( lBuff ) -1] = '\0' ;
     }
