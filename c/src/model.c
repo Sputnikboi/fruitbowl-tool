@@ -209,13 +209,33 @@ bool fb_parse_bbmodel(const char *path, FBModel *out) {
     float uv_scale_x = 16.0f / out->texture_size[0];
     float uv_scale_y = 16.0f / out->texture_size[1];
 
+    // Check for parent (2D items use parent: "item/generated" or "minecraft:item/generated")
+    cJSON *parent = cJSON_GetObjectItem(root, "parent");
+    if (parent && cJSON_IsString(parent)) {
+        strncpy(out->parent, parent->valuestring, sizeof(out->parent) - 1);
+        if (strstr(parent->valuestring, "item/generated") ||
+            strstr(parent->valuestring, "item/handheld")) {
+            out->is_2d = true;
+        }
+    }
+
     // Count textures
     cJSON *textures = cJSON_GetObjectItem(root, "textures");
     out->texture_count = textures ? cJSON_GetArraySize(textures) : 0;
 
     // Elements
     cJSON *elements = cJSON_GetObjectItem(root, "elements");
-    if (!elements) { cJSON_Delete(root); return false; }
+    if (!elements || cJSON_GetArraySize(elements) == 0) {
+        // 2D item — no elements is OK if we have textures
+        if (out->texture_count > 0) {
+            out->is_2d = true;
+            out->element_count = 0;
+        }
+        cJSON *display = cJSON_GetObjectItem(root, "display");
+        if (display) out->has_display = true;
+        cJSON_Delete(root);
+        return out->is_2d;
+    }
 
     cJSON *el;
     int ei = 0;
@@ -453,16 +473,35 @@ bool fb_load_pack_model(const char *pack_root, const char *model_name, FBModel *
     memset(tex_paths, 0, sizeof(tex_paths));
     int max_tex_idx = -1;
 
+    // Check for 2D item (parent: item/generated)
+    cJSON *parent = cJSON_GetObjectItem(root, "parent");
+    if (parent && cJSON_IsString(parent)) {
+        strncpy(out->parent, parent->valuestring, sizeof(out->parent) - 1);
+        if (strstr(parent->valuestring, "item/generated") ||
+            strstr(parent->valuestring, "item/handheld")) {
+            out->is_2d = true;
+        }
+    }
+
     if (textures) {
         cJSON *tex_entry;
         cJSON_ArrayForEach(tex_entry, textures) {
             const char *key = tex_entry->string;
             if (!key || !cJSON_IsString(tex_entry)) continue;
-            // Skip "particle" key — it's not a numbered texture
-            // But do process numeric keys: "0", "1", etc.
-            char *endp;
-            long idx = strtol(key, &endp, 10);
-            if (*endp != '\0' || idx < 0 || idx >= FB_MAX_TEXTURES) continue;
+
+            long idx = -1;
+            // Handle "layer0", "layer1", etc. (2D items)
+            if (strncmp(key, "layer", 5) == 0) {
+                char *endp;
+                idx = strtol(key + 5, &endp, 10);
+                if (*endp != '\0' || idx < 0 || idx >= FB_MAX_TEXTURES) continue;
+                out->is_2d = true;
+            } else {
+                // Numeric keys: "0", "1", etc.
+                char *endp;
+                idx = strtol(key, &endp, 10);
+                if (*endp != '\0' || idx < 0 || idx >= FB_MAX_TEXTURES) continue;
+            }
 
             // Value is like "fruitbowl:item/ham" → texture file at textures/item/ham.png
             const char *val = tex_entry->valuestring;

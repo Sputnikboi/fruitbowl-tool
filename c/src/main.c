@@ -22,15 +22,19 @@ int main(int argc, char **argv) {
     // Load persistent settings (pack_path, custom_headings)
     fb_load_settings(&state);
 
-    // Load .bbmodel from command line
-    if (argc > 1) {
-        const char *path = argv[1];
-        int len = (int)strlen(path);
-        if (len > 8 && strcmp(path + len - 8, ".bbmodel") == 0) {
-            if (fb_parse_bbmodel(path, &state.preview_model)) {
-                fb_load_bbmodel_textures(path, &state.preview_model);
-                state.preview_loaded = true;
-                strncpy(state.bbmodel_path, path, FB_MAX_PATH - 1);
+    // Load from command line: .bbmodel files and --pack <path>
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--pack") == 0 && i + 1 < argc) {
+            strncpy(state.pack_path, argv[++i], FB_MAX_PATH - 1);
+        } else {
+            const char *path = argv[i];
+            int len = (int)strlen(path);
+            if (len > 8 && strcmp(path + len - 8, ".bbmodel") == 0) {
+                if (fb_parse_bbmodel(path, &state.preview_model)) {
+                    fb_load_bbmodel_textures(path, &state.preview_model);
+                    state.preview_loaded = true;
+                    strncpy(state.bbmodel_path, path, FB_MAX_PATH - 1);
+                }
             }
         }
     }

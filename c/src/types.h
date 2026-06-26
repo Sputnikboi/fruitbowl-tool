@@ -68,6 +68,8 @@ typedef struct {
     bool       textures_loaded;
     char       groups_json[8192]; // raw JSON for groups (preserved from bbmodel)
     bool       has_groups;
+    bool       is_2d;       // true if parent: "item/generated" (flat texture item)
+    char       parent[128]; // parent model reference (e.g. "minecraft:item/generated")
 } FBModel;
 
 // ── Pack management ─────────────────────────────────────────────────────────

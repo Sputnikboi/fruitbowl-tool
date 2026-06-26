@@ -626,7 +626,8 @@ def sync_helmets(pack_root: str) -> list[tuple[str, str]]:
 
     helmet_types = [
         "leather_helmet", "chainmail_helmet", "iron_helmet",
-        "golden_helmet", "diamond_helmet", "netherite_helmet", "turtle_helmet"
+        "golden_helmet", "diamond_helmet", "netherite_helmet", "turtle_helmet",
+        "copper_helmet"
     ]
 
     num_entries = len(sb.get("model", {}).get("entries", []))

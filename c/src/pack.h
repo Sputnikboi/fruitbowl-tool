@@ -48,6 +48,10 @@ void fb_ensure_atlas(const char *pack_root, FBLog *log);
 
 // ── Sync helmet dispatch files from stone_button ────────────────────────────
 void fb_sync_helmets(const char *pack_root, FBLog *log);
+void fb_sync_all_tools(const char *pack_root, FBLog *log);
+bool fb_add_png_to_pack(const char *png_path, const char *pack_root,
+                        const char *mc_item_id, const char *author,
+                        const char *heading_override, FBLog *log);
 
 // ── Get heading name for an item ID ─────────────────────────────────────────
 const char *fb_heading_for_item(const char *mc_item_id);

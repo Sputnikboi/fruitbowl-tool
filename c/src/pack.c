@@ -55,14 +55,54 @@ static const FallbackMap FALLBACKS[] = {
 static const char *HELMET_TYPES[] = {
     "leather_helmet", "chainmail_helmet", "iron_helmet",
     "golden_helmet", "diamond_helmet", "netherite_helmet", "turtle_helmet",
-    NULL,
+    "copper_helmet", NULL,
 };
 
 static const char *SYNCED_HELMETS[] = {
     "leather_helmet", "chainmail_helmet", "iron_helmet",
     "golden_helmet", "diamond_helmet", "netherite_helmet", "turtle_helmet",
-    NULL,
+    "copper_helmet", NULL,
 };
+
+// ── Tool sync: each tool type has a master and synced material variants ──────
+
+typedef struct {
+    const char *name;           // display name (e.g. "swords")
+    const char *master;         // master item (e.g. "diamond_sword")
+    const char **variants;      // NULL-terminated list of all material variants
+} ToolCategory;
+
+static const char *SWORD_VARIANTS[] = {
+    "wooden_sword", "stone_sword", "copper_sword", "iron_sword",
+    "golden_sword", "diamond_sword", "netherite_sword", NULL,
+};
+static const char *PICKAXE_VARIANTS[] = {
+    "wooden_pickaxe", "stone_pickaxe", "copper_pickaxe", "iron_pickaxe",
+    "golden_pickaxe", "diamond_pickaxe", "netherite_pickaxe", NULL,
+};
+static const char *AXE_VARIANTS[] = {
+    "wooden_axe", "stone_axe", "copper_axe", "iron_axe",
+    "golden_axe", "diamond_axe", "netherite_axe", NULL,
+};
+static const char *SHOVEL_VARIANTS[] = {
+    "wooden_shovel", "stone_shovel", "copper_shovel", "iron_shovel",
+    "golden_shovel", "diamond_shovel", "netherite_shovel", NULL,
+};
+static const char *HOE_VARIANTS[] = {
+    "wooden_hoe", "stone_hoe", "copper_hoe", "iron_hoe",
+    "golden_hoe", "diamond_hoe", "netherite_hoe", NULL,
+};
+
+static const ToolCategory TOOL_CATEGORIES[] = {
+    {"swords",   "diamond_sword",   SWORD_VARIANTS},
+    {"pickaxes", "diamond_pickaxe", PICKAXE_VARIANTS},
+    {"axes",     "diamond_axe",     AXE_VARIANTS},
+    {"shovels",  "diamond_shovel",  SHOVEL_VARIANTS},
+    {"hoes",     "diamond_hoe",     HOE_VARIANTS},
+    {NULL, NULL, NULL},
+};
+
+#define TOOL_CATEGORY_COUNT 5
 
 const char *fb_heading_for_item(const char *mc_item_id) {
     for (const HeadingMap *h = HEADINGS; h->item_id; h++) {
@@ -83,6 +123,29 @@ static bool is_synced_helmet(const char *item_id) {
         if (strcmp(*h, item_id) == 0) return true;
     }
     return false;
+}
+
+// Returns the ToolCategory if item_id is a synced tool variant (not the master), else NULL
+static const ToolCategory *tool_category_for_synced(const char *item_id) {
+    for (const ToolCategory *tc = TOOL_CATEGORIES; tc->name; tc++) {
+        if (strcmp(item_id, tc->master) == 0) continue; // master is not "synced"
+        for (const char **v = tc->variants; *v; v++) {
+            if (strcmp(*v, item_id) == 0) return tc;
+        }
+    }
+    return NULL;
+}
+
+// Returns the ToolCategory if item_id is the master of a tool category, else NULL
+static const ToolCategory *tool_category_for_master(const char *item_id) {
+    for (const ToolCategory *tc = TOOL_CATEGORIES; tc->name; tc++) {
+        if (strcmp(item_id, tc->master) == 0) return tc;
+    }
+    return NULL;
+}
+
+static bool is_synced_tool(const char *item_id) {
+    return tool_category_for_synced(item_id) != NULL;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -754,6 +817,49 @@ void fb_sync_helmets(const char *pack_root, FBLog *log) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// Tool sync (same pattern as helmet sync)
+// ═════════════════════════════════════════════════════════════════════════════
+
+void fb_sync_tool_category(const char *pack_root, const ToolCategory *tc, FBLog *log) {
+    char master_path[FB_MAX_PATH];
+    snprintf(master_path, sizeof(master_path), "%s/%s/%s.json",
+             pack_root, MC_ITEMS_DIR_REL, tc->master);
+
+    cJSON *master = load_json_file(master_path);
+    if (!master) {
+        fb_log(log, FB_LOG_ERROR, "%s.json not found", tc->master);
+        return;
+    }
+
+    int num_entries = cJSON_GetArraySize(
+        cJSON_GetObjectItem(cJSON_GetObjectItem(master, "model"), "entries"));
+
+    for (const char **v = tc->variants; *v; v++) {
+        if (strcmp(*v, tc->master) == 0) continue; // skip master itself
+
+        cJSON *copy = cJSON_Duplicate(master, 1);
+        cJSON *fallback = cJSON_GetObjectItem(cJSON_GetObjectItem(copy, "model"), "fallback");
+        cJSON_SetValuestring(cJSON_GetObjectItem(fallback, "model"),
+                             TextFormat("minecraft:item/%s", *v));
+
+        char out_path[FB_MAX_PATH];
+        snprintf(out_path, sizeof(out_path), "%s/%s/%s.json",
+                 pack_root, MC_ITEMS_DIR_REL, *v);
+        save_json_file(out_path, copy);
+        cJSON_Delete(copy);
+        fb_log(log, FB_LOG_SUCCESS, "%s.json — %d entries synced", *v, num_entries);
+    }
+
+    cJSON_Delete(master);
+}
+
+void fb_sync_all_tools(const char *pack_root, FBLog *log) {
+    for (const ToolCategory *tc = TOOL_CATEGORIES; tc->name; tc++) {
+        fb_sync_tool_category(pack_root, tc, log);
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Add to pack (full pipeline)
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -761,6 +867,12 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
                     const char *mc_item_id, const char *model_name,
                     const char *author, const char *heading_override,
                     FBLog *log) {
+    // Map display names to real item IDs
+    if (strcmp(mc_item_id, "hats") == 0) mc_item_id = "stone_button";
+    for (const ToolCategory *tc = TOOL_CATEGORIES; tc->name; tc++) {
+        if (strcmp(mc_item_id, tc->name) == 0) { mc_item_id = tc->master; break; }
+    }
+
     // Parse bbmodel
     int file_len;
     char *json_str = fb_read_file(bbmodel_path, &file_len);
@@ -839,6 +951,27 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
     // 2 — Build and save model JSON
     FBModel model;
     fb_parse_bbmodel(bbmodel_path, &model);
+
+    // 2D item: generate parent + layer0 model
+    if (model.is_2d) {
+        cJSON *out = cJSON_CreateObject();
+        const char *parent_str = model.parent[0] ? model.parent : "minecraft:item/generated";
+        cJSON_AddStringToObject(out, "parent", parent_str);
+        cJSON *tex_obj = cJSON_AddObjectToObject(out, "textures");
+        cJSON_AddStringToObject(tex_obj, "layer0", TextFormat("fruitbowl:item/%s", name));
+
+        char model_dir[FB_MAX_PATH];
+        snprintf(model_dir, sizeof(model_dir), "%s/%s", pack_root, FB_MODEL_DIR);
+        fb_ensure_dir(model_dir);
+
+        char model_path[FB_MAX_PATH];
+        snprintf(model_path, sizeof(model_path), "%s/%s/%s.json", pack_root, FB_MODEL_DIR, name);
+        save_json_file(model_path, out);
+        fb_log(log, FB_LOG_SUCCESS, "Model -> %s.json (2D item)", name);
+        cJSON_Delete(out);
+        bb = NULL; // prevent double free at end
+        goto after_model;
+    }
 
     // Build output JSON manually with correct texture refs
     cJSON *out = cJSON_CreateObject();
@@ -977,6 +1110,7 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
         cJSON_Delete(throw_out);
     }
 
+after_model:
     // 3 — Fruitbowl item def (with timestamps)
     char item_path[FB_MAX_PATH];
     snprintf(item_path, sizeof(item_path), "%s/%s/%s.json", pack_root, FB_ITEMS_DIR, name);
@@ -1016,13 +1150,106 @@ bool fb_add_to_pack(const char *bbmodel_path, const char *pack_root,
     update_model_list(pack_root, mc_item_id, name, threshold, author,
                       heading_override, log);
 
-    // 6 — Sync helmets
+    // 6 — Sync helmets / tools
     if (strcmp(mc_item_id, "stone_button") == 0)
         fb_sync_helmets(pack_root, log);
 
+    const ToolCategory *tc = tool_category_for_master(mc_item_id);
+    if (tc) fb_sync_tool_category(pack_root, tc, log);
+
     fb_log(log, FB_LOG_INFO, "/trigger CustomModelData set %d", threshold);
 
-    cJSON_Delete(bb);
+    if (bb) cJSON_Delete(bb);
+    return true;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Add 2D item (PNG texture) to pack
+// ═════════════════════════════════════════════════════════════════════════════
+
+bool fb_add_png_to_pack(const char *png_path, const char *pack_root,
+                        const char *mc_item_id, const char *author,
+                        const char *heading_override, FBLog *log) {
+    if (!png_path || !pack_root || !mc_item_id) {
+        fb_log(log, FB_LOG_ERROR, "Missing required parameters");
+        return false;
+    }
+
+    // Derive name from filename (strip path + .png)
+    const char *base = strrchr(png_path, '/');
+    if (!base) base = strrchr(png_path, '\\');
+    base = base ? base + 1 : png_path;
+
+    char name[FB_MAX_NAME];
+    strncpy(name, base, FB_MAX_NAME - 1);
+    name[FB_MAX_NAME - 1] = '\0';
+    char *dot = strrchr(name, '.');
+    if (dot) *dot = '\0';
+
+    // Map display names to real items
+    const char *real_item = mc_item_id;
+    if (strcmp(mc_item_id, "hats") == 0) real_item = "stone_button";
+    for (const ToolCategory *tc = TOOL_CATEGORIES; tc->name; tc++) {
+        if (strcmp(mc_item_id, tc->name) == 0) { real_item = tc->master; break; }
+    }
+
+    // 1 — Copy texture PNG to pack
+    char tex_dir[FB_MAX_PATH];
+    fb_path_join(tex_dir, sizeof(tex_dir), pack_root, FB_TEXTURE_DIR);
+    fb_ensure_dir(tex_dir);
+
+    char tex_path[FB_MAX_PATH];
+    snprintf(tex_path, sizeof(tex_path), "%s/%s/%s.png", pack_root, FB_TEXTURE_DIR, name);
+
+    int png_len;
+    char *png_data = fb_read_file(png_path, &png_len);
+    if (!png_data) {
+        fb_log(log, FB_LOG_ERROR, "Cannot read %s", png_path);
+        return false;
+    }
+    fb_write_file(tex_path, png_data, png_len);
+    free(png_data);
+    fb_log(log, FB_LOG_SUCCESS, "Texture -> %s.png", name);
+
+    // 2 — Create item/generated model JSON
+    cJSON *out = cJSON_CreateObject();
+    cJSON_AddStringToObject(out, "parent", "minecraft:item/generated");
+    cJSON *tex_obj = cJSON_AddObjectToObject(out, "textures");
+    cJSON_AddStringToObject(tex_obj, "layer0", TextFormat("fruitbowl:item/%s", name));
+
+    char model_dir[FB_MAX_PATH];
+    snprintf(model_dir, sizeof(model_dir), "%s/%s", pack_root, FB_MODEL_DIR);
+    fb_ensure_dir(model_dir);
+
+    char model_path[FB_MAX_PATH];
+    snprintf(model_path, sizeof(model_path), "%s/%s/%s.json", pack_root, FB_MODEL_DIR, name);
+    save_json_file(model_path, out);
+    cJSON_Delete(out);
+    fb_log(log, FB_LOG_SUCCESS, "Model -> %s.json (2D item)", name);
+
+    // 3 — Ensure atlas entry
+    fb_ensure_atlas(pack_root, log);
+
+    // 4 — Update dispatch
+    bool existed = false;
+    int threshold = update_dispatch(pack_root, real_item, name, &existed);
+    if (existed)
+        fb_log(log, FB_LOG_WARN, "Already in %s.json at threshold %d", real_item, threshold);
+    else
+        fb_log(log, FB_LOG_SUCCESS, "Dispatch -> %s.json threshold %d", real_item, threshold);
+
+    // 5 — Model list
+    update_model_list(pack_root, real_item, name, threshold, author,
+                      heading_override, log);
+
+    // 6 — Sync helmets / tools
+    if (strcmp(real_item, "stone_button") == 0)
+        fb_sync_helmets(pack_root, log);
+
+    const ToolCategory *tc = tool_category_for_master(real_item);
+    if (tc) fb_sync_tool_category(pack_root, tc, log);
+
+    fb_log(log, FB_LOG_INFO, "/trigger CustomModelData set %d", threshold);
     return true;
 }
 
@@ -1124,8 +1351,9 @@ int fb_scan_pack(const char *pack_root, FBPackEntry *entries, int max_entries) {
         strncpy(item_id, ent->d_name, len - 5);
         item_id[len - 5] = '\0';
 
-        // Skip synced helmets
+        // Skip synced helmets and synced tool variants
         if (is_synced_helmet(item_id)) continue;
+        if (is_synced_tool(item_id)) continue;
 
         char fullpath[FB_MAX_PATH];
         snprintf(fullpath, sizeof(fullpath), "%s/%s", dir, ent->d_name);
@@ -1163,11 +1391,16 @@ int fb_scan_pack(const char *pack_root, FBPackEntry *entries, int max_entries) {
             // Store real MC item ID always
             strncpy(pe->real_item_type, item_id, FB_MAX_NAME - 1);
 
-            // Display as "hats" for stone_button
+            // Display as "hats" for stone_button, category name for tool masters
             if (strcmp(item_id, "stone_button") == 0)
                 strncpy(pe->item_type, "hats", FB_MAX_NAME - 1);
-            else
-                strncpy(pe->item_type, item_id, FB_MAX_NAME - 1);
+            else {
+                const ToolCategory *tc_disp = tool_category_for_master(item_id);
+                if (tc_disp)
+                    strncpy(pe->item_type, tc_disp->name, FB_MAX_NAME - 1);
+                else
+                    strncpy(pe->item_type, item_id, FB_MAX_NAME - 1);
+            }
 
             strncpy(pe->model_name, ref, FB_MAX_NAME - 1);
             pe->threshold = threshold;
@@ -1212,9 +1445,12 @@ int fb_scan_pack(const char *pack_root, FBPackEntry *entries, int max_entries) {
 
 bool fb_delete_model(const char *pack_root, const char *mc_item_id,
                      const char *model_name, int threshold, FBLog *log) {
-    // Map display "hats" back to real item
+    // Map display names back to real item
     const char *real_item = mc_item_id;
     if (strcmp(mc_item_id, "hats") == 0) real_item = "stone_button";
+    for (const ToolCategory *tc = TOOL_CATEGORIES; tc->name; tc++) {
+        if (strcmp(mc_item_id, tc->name) == 0) { real_item = tc->master; break; }
+    }
 
     // 1 — Remove from dispatch
     if (remove_from_dispatch(pack_root, real_item, model_name))
@@ -1263,9 +1499,13 @@ bool fb_delete_model(const char *pack_root, const char *mc_item_id,
         if (fb_file_exists(path)) { remove(path); fb_log(log, FB_LOG_SUCCESS, "Deleted item def %s.json", model_name); }
     }
 
-    // Sync helmets
+    // Sync helmets / tools
     if (strcmp(real_item, "stone_button") == 0)
         fb_sync_helmets(pack_root, log);
+    {
+        const ToolCategory *tc_del = tool_category_for_master(real_item);
+        if (tc_del) fb_sync_tool_category(pack_root, tc_del, log);
+    }
 
     return true;
 }
@@ -1288,6 +1528,10 @@ bool fb_duplicate_to_item(const char *pack_root, const char *model_name,
 
     if (strcmp(target_item_id, "stone_button") == 0)
         fb_sync_helmets(pack_root, log);
+    {
+        const ToolCategory *tc_dup = tool_category_for_master(target_item_id);
+        if (tc_dup) fb_sync_tool_category(pack_root, tc_dup, log);
+    }
 
     return true;
 }

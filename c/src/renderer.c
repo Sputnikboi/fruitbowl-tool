@@ -8,6 +8,31 @@
 // MC UV: (u1,v1) = top-left, (u2,v2) = bottom-right, in 0-16 range
 
 void fb_draw_model(const FBModel *model) {
+    // 2D item: render a flat textured quad
+    if (model->is_2d && model->textures_loaded && model->texture_count > 0) {
+        Texture2D tex = model->textures[0];
+        if (tex.id > 0) {
+            rlSetTexture(tex.id);
+        }
+        // 16x16 quad centered at (8, 8, 8) facing +Z
+        float x0 = 0, x1 = 16, y0 = 0, y1 = 16, z = 8;
+        rlBegin(RL_QUADS);
+            rlColor4ub(255, 255, 255, 255);
+            // Front face
+            rlTexCoord2f(0, 1); rlVertex3f(x0, y0, z);
+            rlTexCoord2f(1, 1); rlVertex3f(x1, y0, z);
+            rlTexCoord2f(1, 0); rlVertex3f(x1, y1, z);
+            rlTexCoord2f(0, 0); rlVertex3f(x0, y1, z);
+            // Back face
+            rlTexCoord2f(1, 1); rlVertex3f(x1, y0, z);
+            rlTexCoord2f(0, 1); rlVertex3f(x0, y0, z);
+            rlTexCoord2f(0, 0); rlVertex3f(x0, y1, z);
+            rlTexCoord2f(1, 0); rlVertex3f(x1, y1, z);
+        rlEnd();
+        rlSetTexture(0);
+        return;
+    }
+
     for (int i = 0; i < model->element_count; i++) {
         const FBElement *el = &model->elements[i];
 
