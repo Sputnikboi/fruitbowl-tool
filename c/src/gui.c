@@ -236,8 +236,11 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     if (import_editing[0]) safe_paste_to_buffer(s->pack_path, FB_MAX_PATH);
     if (GuiTextBox(pack_r, s->pack_path, FB_MAX_PATH, import_editing[0])) import_editing[0] = !import_editing[0];
     Rectangle pack_btn = {(float)(x+w-PAD-browse_w), (float)cy, (float)browse_w, FIELD_H};
-    if (!fb_dialog_is_open() && GuiButton(pack_btn, "Browse")) {
-        fb_open_folder_dialog(DIALOG_IMPORT_PACK, s->pack_path[0] ? s->pack_path : NULL);
+    if (GuiButton(pack_btn, "Browse")) {
+        char tmp[FB_MAX_PATH];
+        if (fb_pick_folder(tmp, sizeof(tmp))) {
+            strncpy(s->pack_path, tmp, FB_MAX_PATH - 1);
+        }
     }
     cy += FIELD_H + PAD;
 
@@ -246,8 +249,19 @@ static void draw_import_tab(FBAppState *s, int x, int y, int w, int h) {
     if (import_editing[1]) safe_paste_to_buffer(s->bbmodel_path, FB_MAX_PATH);
     if (GuiTextBox(bb_r, s->bbmodel_path, FB_MAX_PATH, import_editing[1])) import_editing[1] = !import_editing[1];
     Rectangle bb_btn = {(float)(x+w-PAD-browse_w), (float)cy, (float)browse_w, FIELD_H};
-    if (!fb_dialog_is_open() && GuiButton(bb_btn, "Browse")) {
-        fb_open_file_dialog(DIALOG_IMPORT_FILE, s->pack_path[0] ? s->pack_path : NULL);
+    if (GuiButton(bb_btn, "Browse")) {
+        char tmp[FB_MAX_PATH];
+        if (fb_pick_bbmodel(tmp, sizeof(tmp))) {
+            strncpy(s->bbmodel_path, tmp, FB_MAX_PATH - 1);
+            fb_sanitize_name(tmp, s->model_name, FB_MAX_NAME);
+            // Also load preview
+            if (s->preview_loaded) fb_unload_model_textures(&s->preview_model);
+            if (fb_parse_bbmodel(tmp, &s->preview_model)) {
+                fb_load_bbmodel_textures(tmp, &s->preview_model);
+                s->preview_loaded = true;
+                reset_camera_to_model(&s->camera, &s->preview_model);
+            }
+        }
     }
     cy += FIELD_H + PAD;
 
@@ -529,8 +543,11 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
 
     // Browse button
     Rectangle mgr_browse_r = {bx, (float)cy, (float)mgr_browse_w, FIELD_H};
-    if (!fb_dialog_is_open() && GuiButton(mgr_browse_r, "Browse")) {
-        fb_open_folder_dialog(DIALOG_MANAGE_PACK, s->pack_path[0] ? s->pack_path : NULL);
+    if (GuiButton(mgr_browse_r, "Browse")) {
+        char tmp[FB_MAX_PATH];
+        if (fb_pick_folder(tmp, sizeof(tmp))) {
+            strncpy(s->pack_path, tmp, FB_MAX_PATH - 1);
+        }
     }
     bx += mgr_browse_w + PAD;
 
@@ -845,11 +862,19 @@ static void draw_manage_tab(FBAppState *s, int x, int y, int w, int h) {
         }
     }
 
-    if (!fb_dialog_is_open() && GuiButton((Rectangle){(float)(list_x + 4*(btn_w+PAD)), by, (float)btn_w, BTN_H}, "Update")) {
+    if (GuiButton((Rectangle){(float)(list_x + 4*(btn_w+PAD)), by, (float)btn_w, BTN_H}, "Update")) {
         int first_sel = -1;
         for (int i = 0; i < s->pack_entry_count; i++) { if (s->manage_selected[i]) { first_sel = i; break; } }
         if (first_sel >= 0) {
-            fb_open_file_dialog(DIALOG_UPDATE_FILE, s->pack_path[0] ? s->pack_path : NULL);
+            FBPackEntry *e = &s->pack_entries[first_sel];
+            char tmp[FB_MAX_PATH];
+            if (fb_pick_bbmodel(tmp, sizeof(tmp))) {
+                fb_log_clear(&s->log);
+                fb_log(&s->log, FB_LOG_HEADER, "Updating %s...", e->model_name);
+                fb_add_to_pack(tmp, s->pack_path, e->real_item_type,
+                               e->model_name, e->author, NULL, &s->log);
+                s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
+            }
         }
     }
     cy += BTN_H + PAD;
@@ -937,8 +962,11 @@ static void draw_batch_tab(FBAppState *s, int x, int y, int w, int h) {
     static bool bp_edit = false;
     if (GuiTextBox(pack_r, s->pack_path, FB_MAX_PATH, bp_edit)) bp_edit = !bp_edit;
     Rectangle bpb = {(float)(x+w-PAD-browse_w), (float)cy, (float)browse_w, FIELD_H};
-    if (!fb_dialog_is_open() && GuiButton(bpb, "Browse")) {
-        fb_open_folder_dialog(DIALOG_BATCH_PACK, s->pack_path[0] ? s->pack_path : NULL);
+    if (GuiButton(bpb, "Browse")) {
+        char tmp[FB_MAX_PATH];
+        if (fb_pick_folder(tmp, sizeof(tmp))) {
+            strncpy(s->pack_path, tmp, FB_MAX_PATH - 1);
+        }
     }
     cy += FIELD_H + PAD;
 
@@ -1001,12 +1029,41 @@ static void draw_batch_tab(FBAppState *s, int x, int y, int w, int h) {
     int bbtn_w = (w - 2*PAD - (bbtn_count-1)*PAD) / bbtn_count;
     float bby = (float)cy;
 
-    if (!fb_dialog_is_open() && GuiButton((Rectangle){(float)(x+PAD), bby, (float)bbtn_w, BTN_H}, "Add Files")) {
-        fb_open_file_dialog(DIALOG_BATCH_FILE, s->pack_path[0] ? s->pack_path : NULL);
+    if (GuiButton((Rectangle){(float)(x+PAD), bby, (float)bbtn_w, BTN_H}, "Add Files")) {
+        char tmp[FB_MAX_PATH];
+        if (fb_pick_bbmodel(tmp, sizeof(tmp))) {
+            if (s->batch_count < FB_MAX_BATCH) {
+                FBBatchEntry *be = &s->batch_entries[s->batch_count];
+                strncpy(be->path, tmp, FB_MAX_PATH - 1);
+                strncpy(be->author, s->author, FB_MAX_NAME - 1);
+                fb_sanitize_name(tmp, be->display_name, FB_MAX_NAME);
+                s->batch_count++;
+            }
+        }
     }
 
-    if (!fb_dialog_is_open() && GuiButton((Rectangle){(float)(x+PAD+bbtn_w+PAD), bby, (float)bbtn_w, BTN_H}, "Add Folder")) {
-        fb_open_folder_dialog(DIALOG_BATCH_FOLDER, NULL);
+    if (GuiButton((Rectangle){(float)(x+PAD+bbtn_w+PAD), bby, (float)bbtn_w, BTN_H}, "Add Folder")) {
+        char folder[FB_MAX_PATH];
+        if (fb_pick_folder(folder, sizeof(folder))) {
+            // Scan folder for .bbmodel and .png files
+            DIR *d = opendir(folder);
+            if (d) {
+                struct dirent *ent;
+                while ((ent = readdir(d)) && s->batch_count < FB_MAX_BATCH) {
+                    int len = (int)strlen(ent->d_name);
+                    bool is_bb = len > 8 && strcmp(ent->d_name + len - 8, ".bbmodel") == 0;
+                    bool is_png = len > 4 && strcmp(ent->d_name + len - 4, ".png") == 0;
+                    if (is_bb || is_png) {
+                        FBBatchEntry *be = &s->batch_entries[s->batch_count];
+                        snprintf(be->path, FB_MAX_PATH, "%s/%s", folder, ent->d_name);
+                        strncpy(be->author, s->author, FB_MAX_NAME - 1);
+                        fb_sanitize_name(ent->d_name, be->display_name, FB_MAX_NAME);
+                        s->batch_count++;
+                    }
+                }
+                closedir(d);
+            }
+        }
     }
 
     if (GuiButton((Rectangle){(float)(x+PAD+2*(bbtn_w+PAD)), bby, (float)bbtn_w, BTN_H}, "Remove")) {
@@ -1336,12 +1393,14 @@ static void draw_confirm_dialog(FBAppState *s, int panel_w) {
         status_color = (Color){80, 220, 80, 255}; // green
     }
     DrawText(status, dx + PAD, cy, FONT_SMALL, status_color);
+    cy += FONT_SMALL + 6;
+
     // 2D item indicator
     if (s->confirm_mode == 0 && s->preview_loaded && s->preview_model.is_2d) {
-        int status_w = MeasureText(status, FONT_SMALL);
-        DrawText("  [2D ITEM]", dx + PAD + status_w, cy, FONT_SMALL, (Color){100, 200, 255, 255});
+        DrawText("[2D ITEM]", dx + PAD, cy, FONT_SMALL, (Color){100, 200, 255, 255});
+        cy += FONT_SMALL + 6;
     }
-    cy += FONT_SMALL + 12;
+    cy += 6;
 
     // Details
     int label_w = 70;
@@ -1384,19 +1443,12 @@ static void draw_confirm_dialog(FBAppState *s, int panel_w) {
         s->confirm_dialog_open = false;
 
         if (s->confirm_mode == 0) {
-            // Single import — detect PNG vs bbmodel
+            // Single import
             const char *name = s->model_name[0] ? s->model_name : NULL;
             const char *heading = s->pending_heading_override[0] ? s->pending_heading_override : NULL;
             if (!heading) heading = fb_custom_heading_for(s->item_type, s->custom_headings, s->custom_heading_count);
-            int path_len = (int)strlen(s->bbmodel_path);
-            bool is_png = path_len > 4 && strcmp(s->bbmodel_path + path_len - 4, ".png") == 0;
-            if (is_png) {
-                fb_add_png_to_pack(s->bbmodel_path, s->pack_path, s->item_type,
-                                   s->author, heading, &s->log);
-            } else {
-                fb_add_to_pack(s->bbmodel_path, s->pack_path, s->item_type,
-                               name, s->author, heading, &s->log);
-            }
+            fb_add_to_pack(s->bbmodel_path, s->pack_path, s->item_type,
+                           name, s->author, heading, &s->log);
             s->pending_heading_override[0] = '\0';
         } else if (s->confirm_mode == 1) {
             // Batch import
@@ -1404,15 +1456,8 @@ static void draw_confirm_dialog(FBAppState *s, int panel_w) {
                 FBBatchEntry *be = &s->batch_entries[i];
                 fb_log(&s->log, FB_LOG_HEADER, "Importing %s...", be->display_name);
                 const char *heading = fb_custom_heading_for(s->item_type, s->custom_headings, s->custom_heading_count);
-                int be_len = (int)strlen(be->path);
-                bool be_png = be_len > 4 && strcmp(be->path + be_len - 4, ".png") == 0;
-                if (be_png) {
-                    fb_add_png_to_pack(be->path, s->pack_path, s->item_type,
-                                       be->author, heading, &s->log);
-                } else {
-                    fb_add_to_pack(be->path, s->pack_path, s->item_type,
-                                   be->display_name, be->author, heading, &s->log);
-                }
+                fb_add_to_pack(be->path, s->pack_path, s->item_type,
+                               be->display_name, be->author, heading, &s->log);
             }
             fb_log(&s->log, FB_LOG_SUCCESS, "Batch import complete (%d files)", s->batch_count);
         } else if (s->confirm_mode == 2) {
@@ -1559,77 +1604,8 @@ static void draw_dup_dialog(FBAppState *s, int panel_w) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 void fb_draw_gui(FBAppState *s) {
-    safe_paste_frame_begin();
     update_scale();
-
-    // Poll file browser for results
-    {
-        char result[FB_MAX_PATH];
-        int dialog_id = 0;
-        if (fb_dialog_poll(result, sizeof(result), &dialog_id)) {
-            switch (dialog_id) {
-            case DIALOG_IMPORT_PACK:
-            case DIALOG_MANAGE_PACK:
-            case DIALOG_BATCH_PACK:
-                strncpy(s->pack_path, result, FB_MAX_PATH - 1);
-                break;
-            case DIALOG_IMPORT_FILE:
-                strncpy(s->bbmodel_path, result, FB_MAX_PATH - 1);
-                fb_sanitize_name(result, s->model_name, FB_MAX_NAME);
-                if (s->preview_loaded) fb_unload_model_textures(&s->preview_model);
-                if (fb_parse_bbmodel(result, &s->preview_model)) {
-                    fb_load_bbmodel_textures(result, &s->preview_model);
-                    s->preview_loaded = true;
-                    reset_camera_to_model(&s->camera, &s->preview_model);
-                }
-                break;
-            case DIALOG_UPDATE_FILE: {
-                int first_sel = -1;
-                for (int i = 0; i < s->pack_entry_count; i++) {
-                    if (s->manage_selected[i]) { first_sel = i; break; }
-                }
-                if (first_sel >= 0) {
-                    FBPackEntry *e = &s->pack_entries[first_sel];
-                    fb_log_clear(&s->log);
-                    fb_log(&s->log, FB_LOG_HEADER, "Updating %s...", e->model_name);
-                    fb_add_to_pack(result, s->pack_path, e->real_item_type,
-                                   e->model_name, e->author, NULL, &s->log);
-                    s->pack_entry_count = fb_scan_pack(s->pack_path, s->pack_entries, FB_MAX_MODELS);
-                }
-                break;
-            }
-            case DIALOG_BATCH_FILE:
-                if (s->batch_count < FB_MAX_BATCH) {
-                    FBBatchEntry *be = &s->batch_entries[s->batch_count];
-                    strncpy(be->path, result, FB_MAX_PATH - 1);
-                    strncpy(be->author, s->author, FB_MAX_NAME - 1);
-                    fb_sanitize_name(result, be->display_name, FB_MAX_NAME);
-                    s->batch_count++;
-                }
-                break;
-            case DIALOG_BATCH_FOLDER: {
-                DIR *d = opendir(result);
-                if (d) {
-                    struct dirent *ent;
-                    while ((ent = readdir(d)) && s->batch_count < FB_MAX_BATCH) {
-                        int len = (int)strlen(ent->d_name);
-                        bool is_bb = len > 8 && strcmp(ent->d_name + len - 8, ".bbmodel") == 0;
-                        bool is_png = len > 4 && strcmp(ent->d_name + len - 4, ".png") == 0;
-                        if (is_bb || is_png) {
-                            FBBatchEntry *be = &s->batch_entries[s->batch_count];
-                            snprintf(be->path, FB_MAX_PATH, "%s/%s", result, ent->d_name);
-                            strncpy(be->author, s->author, FB_MAX_NAME - 1);
-                            fb_sanitize_name(ent->d_name, be->display_name, FB_MAX_NAME);
-                            s->batch_count++;
-                        }
-                    }
-                    closedir(d);
-                }
-                break;
-            }
-            }
-        }
-    }
+    safe_paste_frame_begin();
     int sw = GetScreenWidth(), sh = GetScreenHeight();
 
     // Handle drag & drop (works in all tabs)

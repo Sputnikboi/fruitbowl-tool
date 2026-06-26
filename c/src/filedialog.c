@@ -1,66 +1,41 @@
 #include "filedialog.h"
-#include "filebrowser.h"
+#include <stddef.h>
+#include "tinyfiledialogs.h"
+#include "raylib.h"
 #include <string.h>
 
-static int  pending_id = 0;     // which browse button opened the dialog
-static char pending_result[1024];
-static bool pending_ready = false;
+// Native file dialogs block the main loop. When they return, raylib still
+// sees the mouse button as pressed from the click that opened the dialog,
+// causing buttons underneath to fire a second time.
+//
+// We used to call PollInputEvents() here, but that can crash when called
+// mid-frame (between BeginDrawing/EndDrawing) because glfwPollEvents may
+// trigger window callbacks (resize, close, focus) that corrupt raylib state.
+//
+// Instead we set a cooldown flag that the GUI checks to suppress stale clicks.
 
-static const char *file_exts[] = {"*.bbmodel", "*.png"};
+static double dialog_close_time = 0.0;
 
 bool fb_dialog_just_closed(void) {
-    return false; // no longer needed with in-app browser
+    return (GetTime() - dialog_close_time) < 0.15;
 }
 
-void fb_open_folder_dialog(int id, const char *start_dir) {
-    fb_browser_open(FB_BROWSE_FOLDER, start_dir, NULL, 0);
-    pending_id = id;
-    pending_ready = false;
-}
-
-void fb_open_file_dialog(int id, const char *start_dir) {
-    fb_browser_open(FB_BROWSE_FILE, start_dir, file_exts, 2);
-    pending_id = id;
-    pending_ready = false;
-}
-
-// Legacy wrappers — now just open the browser and return false
 bool fb_pick_folder(char *out_path, int out_size) {
-    (void)out_path; (void)out_size;
-    return false;
+    const char *result = tinyfd_selectFolderDialog("Select Resource Pack Folder", "");
+    dialog_close_time = GetTime();
+    if (!result || !result[0]) return false;
+    strncpy(out_path, result, out_size - 1);
+    out_path[out_size - 1] = '\0';
+    return true;
 }
 
 bool fb_pick_bbmodel(char *out_path, int out_size) {
-    (void)out_path; (void)out_size;
-    return false;
-}
-
-// Call each frame. Returns true when a result is ready.
-// id_out receives which button triggered it, result goes to out_path.
-bool fb_dialog_poll(char *out_path, int out_size, int *id_out) {
-    if (!fb_browser_is_open()) {
-        if (pending_ready) {
-            pending_ready = false;
-            if (id_out) *id_out = pending_id;
-            strncpy(out_path, pending_result, out_size - 1);
-            out_path[out_size - 1] = '\0';
-            pending_id = 0;
-            return true;
-        }
-        return false;
-    }
-
-    if (fb_browser_draw()) {
-        const char *result = fb_browser_result();
-        if (result && result[0]) {
-            strncpy(pending_result, result, sizeof(pending_result) - 1);
-            pending_ready = true;
-        }
-        fb_browser_close();
-    }
-    return false;
-}
-
-bool fb_dialog_is_open(void) {
-    return fb_browser_is_open();
+    const char *filters[] = {"*.bbmodel"};
+    const char *result = tinyfd_openFileDialog(
+        "Select BBModel File", "", 1, filters, "Blockbench Models (*.bbmodel)", 0);
+    dialog_close_time = GetTime();
+    if (!result || !result[0]) return false;
+    strncpy(out_path, result, out_size - 1);
+    out_path[out_size - 1] = '\0';
+    return true;
 }
